@@ -8,7 +8,7 @@ public struct GuardSettings: Codable, Equatable, Sendable {
     /// 실제 입력을 감지하면 바로 잠금 화면을 띄운다.
     public var lockOnTouch: Bool
 
-    public init(alertCooldown: TimeInterval = 30, armGrace: TimeInterval = 10, lockOnTouch: Bool = true) {
+    public init(alertCooldown: TimeInterval = 30, armGrace: TimeInterval = 5, lockOnTouch: Bool = true) {
         self.alertCooldown = alertCooldown
         self.armGrace = armGrace
         self.lockOnTouch = lockOnTouch

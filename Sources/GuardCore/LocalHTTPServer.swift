@@ -11,13 +11,18 @@ public final class LocalHTTPServer {
     public typealias Handler = (HTTPRequest) -> HTTPResponse
 
     private let requestedPort: UInt16
+    private let maxConnections: Int
     private let handler: Handler
     private let queue = DispatchQueue(label: "mac-guard.http")
     private var listener: NWListener?
+    /// 서버 큐에서만 바뀐다.
+    private var openConnections = 0
     public private(set) var port: UInt16 = 0
 
-    public init(port: UInt16, handler: @escaping Handler) {
+    /// 동시에 열린 연결이 maxConnections를 넘으면 새 연결은 바로 닫는다.
+    public init(port: UInt16, maxConnections: Int = 16, handler: @escaping Handler) {
         requestedPort = port
+        self.maxConnections = maxConnections
         self.handler = handler
     }
 
@@ -40,7 +45,14 @@ public final class LocalHTTPServer {
                 break
             }
         }
-        listener.newConnectionHandler = { [weak self] connection in self?.serve(connection) }
+        listener.newConnectionHandler = { [weak self] connection in
+            guard let self, self.openConnections < self.maxConnections else {
+                connection.cancel()
+                return
+            }
+            self.openConnections += 1
+            self.serve(connection)
+        }
         listener.start(queue: queue)
         guard ready.wait(timeout: .now() + timeout) == .success else {
             listener.cancel()
@@ -60,6 +72,18 @@ public final class LocalHTTPServer {
     }
 
     private func serve(_ connection: NWConnection) {
+        var finished = false
+        connection.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .cancelled, .failed:
+                if !finished {
+                    finished = true
+                    self?.openConnections -= 1
+                }
+            default:
+                break
+            }
+        }
         connection.start(queue: queue)
         // 느리게 보내거나 멈춘 연결은 5초 뒤 닫는다.
         queue.asyncAfter(deadline: .now() + 5) { connection.cancel() }

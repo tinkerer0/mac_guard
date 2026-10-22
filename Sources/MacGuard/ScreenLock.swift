@@ -1,7 +1,8 @@
 import CoreGraphics
 import Foundation
 
-/// 잠금은 맥을 재우거나 끄지 않고 비밀번호 화면만 띄운다(⌃⌘Q와 같음). 터미널 작업은 계속 돈다.
+/// 잠금은 비밀번호 화면만 띄운다(⌃⌘Q와 같음). 맥을 재우거나 화면·전원·Lid Mode 설정을 바꾸지 않는다.
+/// 화면을 끄는 pmset displaysleepnow는 일부러 쓰지 않는다.
 enum ScreenLocker {
     private typealias LockFunction = @convention(c) () -> Int32
 
@@ -18,20 +19,7 @@ enum ScreenLocker {
         return true
     }
 
-    /// 화면만 끈다. "잠자기 후 즉시 암호 요구"가 켜져 있어야 잠긴다.
-    static func lockWithPmset() -> Bool {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
-        process.arguments = ["displaysleepnow"]
-        do {
-            try process.run()
-            process.waitUntilExit()
-            return process.terminationStatus == 0
-        } catch {
-            return false
-        }
-    }
-
+    /// 메인 스레드가 아닌 곳에서만 부른다.
     static func waitUntilLocked(timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {

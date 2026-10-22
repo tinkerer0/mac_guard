@@ -18,7 +18,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(config.port, 18787)
         XCTAssertTrue(config.dryRunLock)
         XCTAssertTrue(config.lockOnTouch)
-        XCTAssertEqual(config.armGraceSeconds, 10)
+        XCTAssertEqual(config.armGraceSeconds, 5)
         XCTAssertNil(config.apns)
     }
 
@@ -39,6 +39,18 @@ final class ConfigTests: XCTestCase {
         try Data("short".utf8).write(to: file)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         XCTAssertThrowsError(try TokenFile.read(file.path)) { XCTAssertEqual($0 as? TokenFileError, .tooShort) }
+    }
+
+    func testEventLogRotatesWhenLarge() throws {
+        let file = dir.appendingPathComponent("agent.log")
+        let log = EventLog(path: file.path, maxBytes: 200)
+        for index in 0..<10 { log.write("event", "line \(index) " + String(repeating: "x", count: 40)) }
+        log.flush()
+        let previous = file.appendingPathExtension("1")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: previous.path))
+        let size = try FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber
+        XCTAssertLessThanOrEqual(size?.intValue ?? .max, 200 + 120)
+        XCTAssertTrue(try String(contentsOf: file, encoding: .utf8).contains("line 9"))
     }
 
     func testWatchRegistrationRoundTripIsPrivate() throws {

@@ -23,7 +23,7 @@ public struct GuardConfig: Codable, Equatable, Sendable {
     public var stateFile = "~/.config/mac_guard/state.json"
     public var logFile = "~/Library/Logs/MacGuard/agent.log"
     public var alertCooldownSeconds: Double = 30
-    public var armGraceSeconds: Double = 10
+    public var armGraceSeconds: Double = 5
     public var lockOnTouch = true
     /// 시험용: 잠금 대신 기록만 남긴다.
     public var dryRunLock = false
@@ -102,18 +102,27 @@ public enum StateStore {
 }
 
 /// 한 줄에 사건 하나: 시각, 사건, 내용. 키 값이나 토큰은 쓰지 않는다.
+/// maxBytes를 넘으면 이전 기록을 <이름>.1로 넘기고 새로 쓴다(최대 두 파일).
 public final class EventLog {
     private let url: URL
+    private let maxBytes: UInt64
     private let queue = DispatchQueue(label: "mac-guard.log")
 
-    public init(path: String) {
+    public init(path: String, maxBytes: UInt64 = 1_000_000) {
         url = URL(fileURLWithPath: expandPath(path))
+        self.maxBytes = maxBytes
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     }
 
     public func write(_ event: String, _ detail: String = "") {
         let line = "\(ISO8601DateFormatter().string(from: Date()))\t\(event)\t\(detail)\n"
-        queue.async { [url] in
+        queue.async { [url, maxBytes] in
+            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.uint64Value ?? 0
+            if size > maxBytes {
+                let previous = url.appendingPathExtension("1")
+                try? FileManager.default.removeItem(at: previous)
+                try? FileManager.default.moveItem(at: url, to: previous)
+            }
             if let handle = try? FileHandle(forWritingTo: url) {
                 handle.seekToEndOfFile()
                 handle.write(Data(line.utf8))

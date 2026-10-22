@@ -1,3 +1,4 @@
+import Network
 import XCTest
 @testable import GuardCore
 
@@ -119,6 +120,36 @@ final class APIRouterTests: XCTestCase {
 }
 
 final class LocalHTTPServerTests: XCTestCase {
+    private func status(_ port: UInt16) -> Int? {
+        let done = DispatchSemaphore(value: 0)
+        var code: Int?
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/v1/status")!)
+        request.timeoutInterval = 2
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            code = (response as? HTTPURLResponse)?.statusCode
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 3)
+        return code
+    }
+
+    func testConnectionCapClosesExtraConnections() throws {
+        let server = LocalHTTPServer(port: 0, maxConnections: 1) { _ in .json(200, ["ok": true]) }
+        try server.start()
+        defer { server.stop() }
+        // 요청을 보내지 않고 자리만 차지하는 연결.
+        let holder = NWConnection(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: server.port)!, using: .tcp)
+        let ready = expectation(description: "holder ready")
+        holder.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
+        holder.start(queue: .global())
+        wait(for: [ready], timeout: 3)
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertNil(status(server.port))
+        holder.cancel()
+        Thread.sleep(forTimeInterval: 0.3)
+        XCTAssertEqual(status(server.port), 200)
+    }
+
     func testServesOnLoopback() throws {
         let server = LocalHTTPServer(port: 0) { request in .json(200, ["path": request.path]) }
         try server.start()

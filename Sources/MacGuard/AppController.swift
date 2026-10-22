@@ -2,6 +2,8 @@ import AppKit
 import CoreGraphics
 import GuardCore
 
+/// 이 앱이 바꾸는 것은 자기 파일(~/.config/mac_guard, ~/Library/Logs/MacGuard)과 잠금 화면뿐이다.
+/// 전원·잠자기·화면·Lid Mode 설정은 읽지도 바꾸지도 않는다.
 final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, GuardService {
     private let config: GuardConfig
     private let log: EventLog
@@ -9,14 +11,20 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     private var watch: WatchRegistration?
     private var input: PhysicalInputMonitor?
     private var inputMonitoring = false
+    private var permissionTimer: Timer?
     private var lockWatcher: LockStateWatcher?
+    private var wakeObserver: NSObjectProtocol?
     private var idleTimer: Timer?
     private var lastIdle: Double?
+    private var lastInputLog = Date.distantPast
     private var server: LocalHTTPServer?
     private var serverProblem: String?
     private var sender: APNsSender?
     private var pushProblem: String?
     private var statusItem: NSStatusItem?
+    // 서버 큐에서만 바뀐다.
+    private var authFailures = 0
+    private var authFailureWindow = Date.distantPast
 
     init(config: GuardConfig) {
         self.config = config
@@ -30,8 +38,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         setUpStatusItem()
         startInputMonitor()
         lockWatcher = LockStateWatcher { [weak self] locked in self?.screenLockChanged(locked) }
-        idleTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.checkLockScreenInput()
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.log.write("wake")
+            self?.syncMonitoring()
         }
         setUpPush()
         startServer()
@@ -48,9 +59,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     func arm(lockOnTouch: Bool?) -> GuardStatus {
         onMain {
             engine.arm(at: Date(), lockOnTouch: lockOnTouch)
-            lastIdle = nil
-            input?.resetSyntheticSeen()
-            log.write("armed", "lockOnTouch=\(engine.settings.lockOnTouch)")
+            log.write("armed", "lockOnTouch=\(engine.settings.lockOnTouch) grace=\(Int(engine.settings.armGrace))s")
+            syncMonitoring()
             refreshIcon()
             return makeStatus()
         }
@@ -60,6 +70,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         onMain {
             engine.disarm()
             log.write("disarmed")
+            syncMonitoring()
             refreshIcon()
             return makeStatus()
         }
@@ -74,7 +85,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     func lockNow() -> LockResult {
-        onMain { performLock(reason: "remote") }
+        let method = onMain { requestLock(reason: "remote") }
+        guard method == "sac" else {
+            return method == "unavailable"
+                ? LockResult(locked: false, method: method, detail: "잠금 함수를 찾지 못했어요")
+                : LockResult(locked: true, method: method)
+        }
+        // 잠금 화면이 뜨기를 HTTP 큐에서 기다린다. 메인 스레드는 막지 않는다.
+        let locked = ScreenLocker.waitUntilLocked(timeout: 1.5)
+        log.write("lock-check", "reason=remote locked=\(locked)")
+        return LockResult(locked: locked, method: method, detail: locked ? nil : "잠금 화면이 뜨지 않았어요")
     }
 
     func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus {
@@ -95,21 +115,55 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
 
     private func startInputMonitor() {
         let monitor = PhysicalInputMonitor(
-            onInput: { [weak self] in self?.physicalInput() },
+            onInput: { [weak self] in self?.physicalInput(source: "tap") },
             onSynthetic: { [weak self] pid in self?.syntheticInputIgnored(from: pid) }
         )
-        inputMonitoring = monitor.start()
-        if inputMonitoring {
-            input = monitor
-        } else {
-            log.write("input-monitoring-missing")
-            // 허용 요청 창은 이 앱 이름으로 뜬다. 허용한 뒤에는 앱을 다시 켜야 한다.
-            _ = CGRequestListenEventAccess()
+        input = monitor
+        if monitor.start() {
+            inputMonitoring = true
+            return
+        }
+        log.write("input-monitoring-missing")
+        // 허용 요청 창은 이 앱 이름으로 뜬다. 허용되면 다시 켜지 않아도 2초 안에 감시를 붙인다.
+        _ = CGRequestListenEventAccess()
+        let timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] timer in
+            guard let self, monitor.start() else { return }
+            timer.invalidate()
+            self.permissionTimer = nil
+            self.inputMonitoring = true
+            self.log.write("input-monitoring-granted")
+            self.syncMonitoring()
+        }
+        timer.tolerance = 0.5
+        permissionTimer = timer
+    }
+
+    /// 경계 중에만 입력 탭을 켜고, 경계 중이면서 잠긴 동안에만 유휴 시간을 본다.
+    private func syncMonitoring() {
+        input?.setActive(engine.isArmed)
+        let watchIdle = engine.isArmed && engine.screenLocked
+        if watchIdle, idleTimer == nil {
+            lastIdle = nil
+            let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                self?.checkLockScreenInput()
+            }
+            timer.tolerance = 0.1
+            idleTimer = timer
+        } else if !watchIdle, let timer = idleTimer {
+            timer.invalidate()
+            idleTimer = nil
+            lastIdle = nil
         }
     }
 
-    private func physicalInput() {
-        apply(engine.physicalInput(at: Date()))
+    private func physicalInput(source: String) {
+        // 왜 잠겼는지 나중에 볼 수 있게 경계 중 감지는 5초에 한 줄만 남긴다.
+        let now = Date()
+        if engine.isArmed, now.timeIntervalSince(lastInputLog) >= 5 {
+            lastInputLog = now
+            log.write("input", "source=\(source) locked=\(engine.screenLocked)")
+        }
+        apply(engine.physicalInput(at: now))
         refreshIcon()
     }
 
@@ -122,8 +176,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
 
     private func screenLockChanged(_ locked: Bool) {
         log.write(locked ? "screen-locked" : "screen-unlocked", engine.isArmed ? "armed" : "")
-        lastIdle = nil
         apply(engine.screenLockChanged(locked: locked, at: Date()))
+        syncMonitoring()
         refreshIcon()
     }
 
@@ -138,41 +192,50 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         defer { lastIdle = idle }
         guard let lastIdle, idle < 1, idle + 0.2 < lastIdle else { return }
         if let synthetic = input?.lastSyntheticAt, Date().timeIntervalSince(synthetic) < 1.5 { return }
-        physicalInput()
+        physicalInput(source: "lock-screen-idle")
     }
 
     private func apply(_ actions: [GuardAction]) {
-        var lockFailed = false
         for action in actions {
             switch action {
             case .lockScreen:
-                lockFailed = !performLock(reason: "touch").locked
+                requestLock(reason: "touch")
+            case .sendAlert(let alert) where alert.kind == .touchedAndLocked:
+                // 잠금 화면이 실제로 떴는지 본 뒤 알린다. 안 떴으면 잠그기 버튼이 붙은 알림으로 바꾼다.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                    self?.confirmTouchLock(alert)
+                }
             case .sendAlert(let alert):
-                // 바로 잠금에 실패했으면 잠그기 버튼이 붙은 알림으로 바꾼다.
-                send(lockFailed && alert.kind == .touchedAndLocked ? GuardAlert(kind: .touched, at: alert.at) : alert)
+                send(alert)
             }
         }
+        syncMonitoring()
     }
 
-    private func performLock(reason: String) -> LockResult {
-        let result: LockResult
+    /// 잠금 화면을 띄우기만 하고 기다리지 않는다.
+    @discardableResult
+    private func requestLock(reason: String) -> String {
+        let method: String
         if ScreenLocker.isScreenLocked() {
-            result = LockResult(locked: true, method: "already-locked")
+            method = "already-locked"
         } else if config.dryRunLock {
-            result = LockResult(locked: true, method: "dry-run")
-        } else if ScreenLocker.lockWithSAC(), ScreenLocker.waitUntilLocked(timeout: 1.5) {
-            result = LockResult(locked: true, method: "sac")
-        } else if ScreenLocker.lockWithPmset(), ScreenLocker.waitUntilLocked(timeout: 2) {
-            result = LockResult(locked: true, method: "pmset")
+            method = "dry-run"
         } else {
-            result = LockResult(locked: false, method: "failed", detail: "잠금 화면이 뜨지 않았어요")
+            method = ScreenLocker.lockWithSAC() ? "sac" : "unavailable"
         }
-        log.write("lock", "reason=\(reason) method=\(result.method) locked=\(result.locked)")
-        if result.locked, result.method != "dry-run" {
+        log.write("lock", "reason=\(reason) method=\(method)")
+        return method
+    }
+
+    private func confirmTouchLock(_ alert: GuardAlert) {
+        let locked = config.dryRunLock || ScreenLocker.isScreenLocked()
+        log.write("lock-check", "reason=touch locked=\(locked)")
+        if locked, !config.dryRunLock {
             // 잠김 알림이 늦게 와도 잠긴 화면 기준으로 판단하게 한다.
             _ = engine.screenLockChanged(locked: true, at: Date())
+            syncMonitoring()
         }
-        return result
+        send(locked ? alert : GuardAlert(kind: .touched, at: alert.at))
     }
 
     // MARK: - 알림
@@ -217,15 +280,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     private func startServer() {
         do {
             let token = try TokenFile.read(config.tokenFile)
-            let router = APIRouter(token: token, service: self) { [log] request in
-                log.write("auth-failed", "\(request.method) \(request.path)")
+            let router = APIRouter(token: token, service: self) { [weak self] request in
+                self?.noteAuthFailure(request)
             }
             var lastClient = ""
             let server = LocalHTTPServer(port: config.port) { [log] request in
                 let response = router.handle(request)
                 // 워치는 5초마다 상태를 물어서 상태 요청은 접속 프로그램이 바뀔 때만 남긴다.
                 let client = String(request.headers["user-agent"]?.split(separator: " ").first ?? "?")
-                if !(request.path == "/v1/status" && response.status == 200) || client != lastClient {
+                if response.status != 401, !(request.path == "/v1/status" && response.status == 200) || client != lastClient {
                     log.write("api", "\(request.method) \(request.path) \(response.status) client=\(client)")
                 }
                 if response.status == 200 { lastClient = client }
@@ -237,6 +300,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
             serverProblem = String(describing: error)
             log.write("server-failed", String(describing: error))
         }
+    }
+
+    /// 토큰이 틀린 요청은 1분에 한 줄만 남긴다(바깥에 공개했을 때 기록이 불어나지 않게).
+    private func noteAuthFailure(_ request: HTTPRequest) {
+        let now = Date()
+        if now.timeIntervalSince(authFailureWindow) >= 60 {
+            if authFailures > 1 { log.write("auth-failed-summary", "count=\(authFailures) previous 60s") }
+            authFailureWindow = now
+            authFailures = 0
+            log.write("auth-failed", "\(request.method) \(request.path)")
+        }
+        authFailures += 1
     }
 
     // MARK: - 메뉴 막대
@@ -296,7 +371,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     @objc private func lockFromMenu() {
-        _ = performLock(reason: "menu")
+        requestLock(reason: "menu")
     }
 
     @objc private func openInputMonitoringSettings() {
