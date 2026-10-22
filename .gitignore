@@ -8,3 +8,4 @@ watch/App/Secrets.generated.swift
 *.p8
 xcuserdata/
 .DS_Store
+work/
