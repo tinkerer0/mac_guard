@@ -23,15 +23,17 @@ struct ContentView: View {
                     ))
                     .disabled(model.busy)
                 }
-                Button(role: .destructive) {
-                    Task { await model.lockNow() }
-                } label: {
-                    Label("지금 잠그기", systemImage: "lock.fill")
+                if model.reachable != false {
+                    Button(role: .destructive) {
+                        Task { await model.lockNow() }
+                    } label: {
+                        Label("지금 잠그기", systemImage: "lock.fill")
+                    }
+                    .tint(.red)
+                    .disabled(model.busy)
                 }
-                .tint(.red)
-                .disabled(model.busy)
 
-                if let message = model.message {
+                if model.reachable != false, let message = model.message {
                     Text(message)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -49,8 +51,15 @@ struct ContentView: View {
 
     @ViewBuilder private var header: some View {
         if model.reachable == false {
-            Label("맥에 연결 안 됨", systemImage: "wifi.exclamationmark")
-                .foregroundStyle(.orange)
+            // 외부 연결(Funnel)을 꺼 두고 알림만 받는 사용 방식에서는 이 화면이 기본이다.
+            VStack(spacing: 4) {
+                Label("알림 받는 중", systemImage: "bell.badge")
+                    .font(.headline)
+                Text("경계는 맥 메뉴 막대에서 켜고 끕니다")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         } else if let status = model.status {
             VStack(spacing: 2) {
                 Label(status.armed ? "경계 중" : "경계 꺼짐",
