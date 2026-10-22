@@ -175,8 +175,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     private func screenLockChanged(_ locked: Bool) {
-        log.write(locked ? "screen-locked" : "screen-unlocked", engine.isArmed ? "armed" : "")
+        let wasArmed = engine.isArmed
+        log.write(locked ? "screen-locked" : "screen-unlocked", wasArmed ? "armed" : "")
         apply(engine.screenLockChanged(locked: locked, at: Date()))
+        if wasArmed, !engine.isArmed { log.write("disarmed", "reason=unlocked") }
         syncMonitoring()
         refreshIcon()
     }

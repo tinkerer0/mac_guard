@@ -26,6 +26,13 @@ if [[ ! -f "$config" ]]; then
 fi
 
 launchctl bootout "$domain/$label" 2>/dev/null || true
+# 입력 모니터링 허용 때의 "종료 후 다시 열기"로 로그인 항목 밖에서 켜진 앱도 끈다.
+# 남겨 두면 새로 켠 쪽이 이미 실행 중으로 보고 스스로 끝난다.
+pkill -TERM -f "$app/Contents/MacOS/MacGuard" 2>/dev/null || true
+for _ in {1..30}; do
+  pgrep -f "$app/Contents/MacOS/MacGuard" >/dev/null || break
+  sleep 0.1
+done
 rm -rf "$app"
 cp -R dist/MacGuard.app "$app"
 codesign --verify --strict "$app"
