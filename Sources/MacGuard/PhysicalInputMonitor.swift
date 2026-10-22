@@ -10,6 +10,8 @@ final class PhysicalInputMonitor {
     private var tap: CFMachPort?
     private var lastEmit = Date.distantPast
     private var seenSynthetic = Set<pid_t>()
+    /// 마지막으로 합성 입력을 본 시각. 잠긴 화면 보조 감지에서 합성 입력을 거르는 데 쓴다.
+    private(set) var lastSyntheticAt: Date?
 
     /// onSynthetic은 합성 입력을 보낸 프로세스마다 한 번만 불린다(resetSyntheticSeen 전까지).
     init(onInput: @escaping () -> Void, onSynthetic: @escaping (pid_t) -> Void) {
@@ -58,6 +60,7 @@ final class PhysicalInputMonitor {
         }
         let pid = pid_t(truncatingIfNeeded: event.getIntegerValueField(.eventSourceUnixProcessID))
         guard pid == 0 else {
+            lastSyntheticAt = Date()
             if seenSynthetic.insert(pid).inserted { onSynthetic(pid) }
             return
         }

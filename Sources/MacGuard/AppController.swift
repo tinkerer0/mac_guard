@@ -128,7 +128,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     /// 잠긴 동안에는 암호 입력란의 보안 입력 때문에 키 입력이 이벤트 탭에 안 보일 수 있어 유휴 시간으로 보조한다.
-    /// 잠긴 화면에서는 AI 화면 조작이 막혀 있어 합성 입력 오알림 걱정이 작다.
+    /// 유휴 시간은 합성 입력에도 0으로 돌아가므로, 같은 무렵 탭에 합성 입력이 보였으면 실제 입력으로 치지 않는다.
     private func checkLockScreenInput() {
         guard engine.isArmed, engine.screenLocked else {
             lastIdle = nil
@@ -136,9 +136,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         }
         let idle = ScreenLocker.hidIdleSeconds()
         defer { lastIdle = idle }
-        if let lastIdle, idle < 1, idle + 0.2 < lastIdle {
-            physicalInput()
-        }
+        guard let lastIdle, idle < 1, idle + 0.2 < lastIdle else { return }
+        if let synthetic = input?.lastSyntheticAt, Date().timeIntervalSince(synthetic) < 1.5 { return }
+        physicalInput()
     }
 
     private func apply(_ actions: [GuardAction]) {
