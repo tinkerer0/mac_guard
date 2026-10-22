@@ -53,6 +53,17 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(try String(contentsOf: file, encoding: .utf8).contains("line 9"))
     }
 
+    /// 검토 F3: 기록 한 건에 줄바꿈·탭이 섞여도 한 줄로 남는다.
+    func testEventLogEscapesControlCharacters() throws {
+        let file = dir.appendingPathComponent("escape.log")
+        let log = EventLog(path: file.path)
+        log.write("auth-failed", "GET /x\n2099-01-01T00:00:00Z\tdisarmed\treason=forged")
+        log.flush()
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertTrue(lines[0].hasSuffix(#"GET /x\x0A2099-01-01T00:00:00Z\x09disarmed\x09reason=forged"#))
+    }
+
     func testWatchRegistrationRoundTripIsPrivate() throws {
         let file = dir.appendingPathComponent("sub/state.json").path
         let registration = WatchRegistration(deviceToken: "abcd", environment: .sandbox, registeredAt: Date(timeIntervalSince1970: 1_800_000_000))

@@ -115,7 +115,7 @@ public final class EventLog {
     }
 
     public func write(_ event: String, _ detail: String = "") {
-        let line = "\(ISO8601DateFormatter().string(from: Date()))\t\(event)\t\(detail)\n"
+        let line = "\(ISO8601DateFormatter().string(from: Date()))\t\(Self.escape(event))\t\(Self.escape(detail))\n"
         queue.async { [url, maxBytes] in
             let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.uint64Value ?? 0
             if size > maxBytes {
@@ -136,5 +136,18 @@ public final class EventLog {
     /// 시험에서 기록이 다 써졌는지 기다릴 때 쓴다.
     public func flush() {
         queue.sync {}
+    }
+
+    /// 줄바꿈·탭 같은 제어 문자를 \xNN으로 바꿔 한 사건이 한 줄을 넘지 않게 한다.
+    static func escape(_ text: String) -> String {
+        var escaped = ""
+        for scalar in text.unicodeScalars {
+            if scalar.value < 0x20 || scalar.value == 0x7F {
+                escaped += String(format: "\\x%02X", scalar.value)
+            } else {
+                escaped.unicodeScalars.append(scalar)
+            }
+        }
+        return escaped
     }
 }

@@ -18,22 +18,52 @@ final class HTTPParserTests: XCTestCase {
         XCTAssertEqual(HTTPParser.parse(Data("GET / HTTP/1.1\r\nHost: a".utf8)), .incomplete)
     }
 
+    func testHeadIsAvailableBeforeBody() {
+        let raw = "POST /v1/watch-token HTTP/1.1\r\nContent-Length: 8192\r\n\r\nx"
+        guard case .head(let head, _, let length) = HTTPParser.parseHead(Data(raw.utf8)) else { return XCTFail("no head") }
+        XCTAssertEqual(head.path, "/v1/watch-token")
+        XCTAssertEqual(length, 8192)
+        XCTAssertEqual(HTTPParser.parse(Data(raw.utf8)), .incomplete)
+    }
+
     func testRejectsChunkedAndOversizedBodies() {
         let chunked = "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
         let huge = "POST / HTTP/1.1\r\nContent-Length: 9000\r\n\r\n"
+        let signed = "POST / HTTP/1.1\r\nContent-Length: +5\r\n\r\n"
         XCTAssertEqual(HTTPParser.parse(Data(chunked.utf8)), .invalid("transfer-encoding not supported"))
         XCTAssertEqual(HTTPParser.parse(Data(huge.utf8)), .invalid("bad content-length"))
+        XCTAssertEqual(HTTPParser.parse(Data(signed.utf8)), .invalid("bad content-length"))
     }
 
     func testRejectsGarbage() {
         XCTAssertEqual(HTTPParser.parse(Data("HELLO\r\n\r\n".utf8)), .invalid("bad request line"))
         XCTAssertEqual(HTTPParser.parse(Data(String(repeating: "a", count: 9000).utf8)), .invalid("header too large"))
     }
+
+    /// 검토 F3: 요청 줄에 맨 LF·TAB가 섞이면 기록에 가짜 줄이 생겼다.
+    func testRejectsControlCharactersAndOddRequestLines() {
+        let forged = "GET /x\n2099-01-01T00:00:00Z\tdisarmed\treason=forged HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        XCTAssertEqual(HTTPParser.parse(Data(forged.utf8)), .invalid("bad request line"))
+        XCTAssertEqual(HTTPParser.parse(Data("get /v1/status HTTP/1.1\r\n\r\n".utf8)), .invalid("bad request line"))
+        XCTAssertEqual(HTTPParser.parse(Data("GET http://x/v1/status HTTP/1.1\r\n\r\n".utf8)), .invalid("bad request line"))
+        XCTAssertEqual(HTTPParser.parse(Data("GET /v1/status HTTP/2.0\r\n\r\n".utf8)), .invalid("bad request line"))
+        XCTAssertEqual(HTTPParser.parse(Data("GET /v1/status  HTTP/1.1\r\n\r\n".utf8)), .invalid("bad request line"))
+        XCTAssertEqual(HTTPParser.parse(Data("GET / HTTP/1.1\r\nBad Name: x\r\n\r\n".utf8)), .invalid("bad header line"))
+        XCTAssertEqual(HTTPParser.parse(Data("GET / HTTP/1.1\r\nX: a\u{7}b\r\n\r\n".utf8)), .invalid("bad header line"))
+    }
+
+    func testRejectsDuplicateSecurityHeaders() {
+        let length = "POST / HTTP/1.1\r\nContent-Length: 0\r\nContent-Length: 2\r\n\r\n{}"
+        let auth = "GET / HTTP/1.1\r\nAuthorization: Bearer a\r\nAuthorization: Bearer b\r\n\r\n"
+        XCTAssertEqual(HTTPParser.parse(Data(length.utf8)), .invalid("duplicate content-length"))
+        XCTAssertEqual(HTTPParser.parse(Data(auth.utf8)), .invalid("duplicate authorization"))
+    }
 }
 
 private final class FakeService: GuardService {
     var armedWith: [Bool?] = []
     var locks = 0
+    var saveFails = false
     var registered: [(String, APNsEnvironment?)] = []
     let sample = GuardStatus(
         armed: false, armedAt: nil, watchingFrom: nil, screenLocked: false, lockOnTouch: true,
@@ -45,9 +75,9 @@ private final class FakeService: GuardService {
     func disarm() -> GuardStatus { sample }
     func setLockOnTouch(_ on: Bool) -> GuardStatus { sample }
     func lockNow() -> LockResult { locks += 1; return LockResult(locked: true, method: "dry-run") }
-    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus {
+    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? {
         registered.append((deviceToken, environment))
-        return sample
+        return saveFails ? nil : sample
     }
 }
 
@@ -74,6 +104,12 @@ final class APIRouterTests: XCTestCase {
         XCTAssertEqual(router.handle(request("POST", "/v1/lock", auth: "")).status, 401)
         XCTAssertEqual(service.locks, 0)
         XCTAssertEqual(failures, ["/v1/status", "/v1/status", "/v1/status", "/v1/lock"])
+    }
+
+    func testHeadCheckRejectsBeforeBody() {
+        XCTAssertEqual(router.checkHead(HTTPRequest(method: "POST", path: "/v1/watch-token"))?.status, 401)
+        XCTAssertNil(router.checkHead(request("POST", "/v1/watch-token")))
+        XCTAssertEqual(failures, ["/v1/watch-token"])
     }
 
     func testShortServerTokenNeverAuthorizes() {
@@ -111,6 +147,12 @@ final class APIRouterTests: XCTestCase {
         XCTAssertEqual(service.registered.first?.1, .sandbox)
     }
 
+    func testWatchTokenSaveFailureIsReported() {
+        service.saveFails = true
+        let hex = String(repeating: "ab", count: 32)
+        XCTAssertEqual(router.handle(request("POST", "/v1/watch-token", body: #"{"token":"\#(hex)"}"#)).status, 500)
+    }
+
     func testConstantTimeEquals() {
         XCTAssertTrue(constantTimeEquals(Array("abc".utf8), Array("abc".utf8)))
         XCTAssertFalse(constantTimeEquals(Array("abc".utf8), Array("abd".utf8)))
@@ -120,34 +162,56 @@ final class APIRouterTests: XCTestCase {
 }
 
 final class LocalHTTPServerTests: XCTestCase {
-    private func status(_ port: UInt16) -> Int? {
+    private let token = String(repeating: "ab", count: 32)
+    private let clientQueue = DispatchQueue(label: "test.clients")
+
+    /// 원시 바이트를 보내고 첫 응답 조각을 받는다(보안 검토 TransportReviewTests에서 가져옴).
+    private func exchange(_ port: UInt16, _ bytes: String, timeout: Double = 2) -> String {
+        let connection = NWConnection(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
         let done = DispatchSemaphore(value: 0)
-        var code: Int?
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/v1/status")!)
-        request.timeoutInterval = 2
-        URLSession.shared.dataTask(with: request) { _, response, _ in
-            code = (response as? HTTPURLResponse)?.statusCode
-            done.signal()
-        }.resume()
-        _ = done.wait(timeout: .now() + 3)
-        return code
+        var result = ""
+        connection.stateUpdateHandler = { state in
+            if case .failed = state { done.signal() }
+            if case .ready = state {
+                connection.send(content: Data(bytes.utf8), completion: .contentProcessed { _ in
+                    connection.receive(minimumIncompleteLength: 1, maximumLength: 16384) { data, _, _, _ in
+                        result = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                        done.signal()
+                    }
+                })
+            }
+        }
+        connection.start(queue: clientQueue)
+        _ = done.wait(timeout: .now() + timeout)
+        connection.cancel()
+        return result
     }
 
-    func testConnectionCapClosesExtraConnections() throws {
-        let server = LocalHTTPServer(port: 0, maxConnections: 1) { _ in .json(200, ["ok": true]) }
+    /// 보내기만 하고 응답을 기다리지 않는 연결.
+    private func hold(_ port: UInt16, _ bytes: String) -> NWConnection {
+        let connection = NWConnection(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
+        let sent = DispatchSemaphore(value: 0)
+        connection.stateUpdateHandler = { state in
+            if case .ready = state {
+                connection.send(content: Data(bytes.utf8), completion: .contentProcessed { _ in sent.signal() })
+            }
+        }
+        connection.start(queue: clientQueue)
+        _ = sent.wait(timeout: .now() + 2)
+        return connection
+    }
+
+    private func guarded(maxConnections: Int = 16) throws -> LocalHTTPServer {
+        let router = APIRouter(token: token, service: StubService())
+        let server = LocalHTTPServer(port: 0, maxConnections: maxConnections, headCheck: { router.checkHead($0) }) { _ in
+            .json(200, ["ok": true])
+        }
         try server.start()
-        defer { server.stop() }
-        // 요청을 보내지 않고 자리만 차지하는 연결.
-        let holder = NWConnection(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: server.port)!, using: .tcp)
-        let ready = expectation(description: "holder ready")
-        holder.stateUpdateHandler = { if case .ready = $0 { ready.fulfill() } }
-        holder.start(queue: .global())
-        wait(for: [ready], timeout: 3)
-        Thread.sleep(forTimeInterval: 0.3)
-        XCTAssertNil(status(server.port))
-        holder.cancel()
-        Thread.sleep(forTimeInterval: 0.3)
-        XCTAssertEqual(status(server.port), 200)
+        return server
+    }
+
+    private var authorized: String {
+        "GET /v1/status HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer \(token)\r\n\r\n"
     }
 
     func testServesOnLoopback() throws {
@@ -155,17 +219,56 @@ final class LocalHTTPServerTests: XCTestCase {
         try server.start()
         defer { server.stop() }
         XCTAssertNotEqual(server.port, 0)
-
-        let done = expectation(description: "response")
-        var status = 0
-        var body = Data()
-        URLSession.shared.dataTask(with: URL(string: "http://127.0.0.1:\(server.port)/hello?a=1")!) { data, response, _ in
-            status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            body = data ?? Data()
-            done.fulfill()
-        }.resume()
-        wait(for: [done], timeout: 5)
-        XCTAssertEqual(status, 200)
-        XCTAssertEqual(try JSONSerialization.jsonObject(with: body) as? [String: String], ["path": "/hello"])
+        let response = exchange(server.port, "GET /hello?a=1 HTTP/1.1\r\nHost: x\r\n\r\n")
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 200"))
+        XCTAssertTrue(response.contains(#""path":"\/hello""#))
     }
+
+    /// 검토 Q1: 토큰 없는 요청이 본문을 덜 보낸 채 자리를 막지 못한다(헤더만 보고 바로 401).
+    func testUnauthenticatedSlowBodiesAreRejectedAtHeaders() throws {
+        let server = try guarded()
+        defer { server.stop() }
+        let slowBody = "POST /v1/watch-token HTTP/1.1\r\nHost: localhost\r\nContent-Length: 8192\r\n\r\nx"
+        let started = Date()
+        XCTAssertTrue(exchange(server.port, slowBody).hasPrefix("HTTP/1.1 401"))
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1)
+        let holders = (0..<16).map { _ in hold(server.port, slowBody) }
+        defer { holders.forEach { $0.cancel() } }
+        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertTrue(exchange(server.port, authorized).hasPrefix("HTTP/1.1 200"))
+    }
+
+    /// 헤더를 끝까지 보내지 않고 자리를 차지한 연결은 새 연결에 밀려난다.
+    func testSlowHeadersAreEvictedWhenFull() throws {
+        let server = try guarded(maxConnections: 4)
+        defer { server.stop() }
+        let holders = (0..<8).map { _ in hold(server.port, "GET /v1/status HTTP/1.1\r\nHost: loc") }
+        defer { holders.forEach { $0.cancel() } }
+        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertTrue(exchange(server.port, authorized).hasPrefix("HTTP/1.1 200"))
+    }
+
+    func testOneConnectionOneResponseAndHeaderLimit() throws {
+        let server = try guarded()
+        defer { server.stop() }
+        let pipeline = "POST /v1/lock HTTP/1.1\r\nHost: localhost\r\n\r\nPOST /v1/lock HTTP/1.1\r\nAuthorization: Bearer \(token)\r\n\r\n"
+        let response = exchange(server.port, pipeline)
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 401"))
+        XCTAssertFalse(response.contains("HTTP/1.1 200"))
+        let large = exchange(server.port, "GET / HTTP/1.1\r\nX-Header: " + String(repeating: "x", count: 9000))
+        XCTAssertTrue(large.hasPrefix("HTTP/1.1 400"))
+    }
+}
+
+private final class StubService: GuardService {
+    private let status = GuardStatus(
+        armed: false, armedAt: nil, watchingFrom: nil, screenLocked: false, lockOnTouch: true,
+        lastInputAt: nil, lastAlertAt: nil, inputMonitoring: true, watchRegistered: false, pushConfigured: false
+    )
+    func currentStatus() -> GuardStatus { status }
+    func arm(lockOnTouch: Bool?) -> GuardStatus { status }
+    func disarm() -> GuardStatus { status }
+    func setLockOnTouch(_ on: Bool) -> GuardStatus { status }
+    func lockNow() -> LockResult { LockResult(locked: false, method: "unavailable") }
+    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? { status }
 }

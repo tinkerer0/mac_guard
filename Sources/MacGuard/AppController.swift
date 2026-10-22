@@ -37,7 +37,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     func applicationDidFinishLaunching(_ notification: Notification) {
         setUpStatusItem()
         startInputMonitor()
-        lockWatcher = LockStateWatcher { [weak self] locked in self?.screenLockChanged(locked) }
+        lockWatcher = LockStateWatcher { [weak self] claimed in self?.lockNotification(claimed: claimed) }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -97,17 +97,19 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         return LockResult(locked: locked, method: method, detail: locked ? nil : "잠금 화면이 뜨지 않았어요")
     }
 
-    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus {
+    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? {
         onMain {
             let registration = WatchRegistration(deviceToken: deviceToken, environment: environment, registeredAt: Date())
             watch = registration
             do {
                 try StateStore.saveWatch(registration, to: config.stateFile)
                 log.write("watch-registered", "env=\(environment?.rawValue ?? "-")")
+                return makeStatus()
             } catch {
+                // 지금 실행 중에는 쓰되, 다시 켜면 잊으므로 워치가 다시 등록하도록 실패로 답한다.
                 log.write("state-save-failed", String(describing: error))
+                return nil
             }
-            return makeStatus()
         }
     }
 
@@ -172,6 +174,22 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         var name = [CChar](repeating: 0, count: 256)
         let fallback = proc_name(pid, &name, UInt32(name.count)) > 0 ? String(cString: name) : "?"
         log.write("synthetic-ignored", "pid=\(pid) \(NSRunningApplication(processIdentifier: pid)?.localizedName ?? fallback)")
+    }
+
+    /// 잠금·해제 알림은 다른 프로그램도 보낼 수 있어 실제 화면 상태로 다시 확인한다.
+    /// 알림과 실제 상태가 다르면 0.5초 뒤 한 번 더 보고 실제 상태를 따른다.
+    private func lockNotification(claimed: Bool) {
+        let actual = ScreenLocker.isScreenLocked()
+        guard actual != claimed else {
+            screenLockChanged(actual)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self else { return }
+            let later = ScreenLocker.isScreenLocked()
+            if later != claimed { self.log.write("lock-notification-ignored", "claimed=\(claimed) actual=\(later)") }
+            self.screenLockChanged(later)
+        }
     }
 
     private func screenLockChanged(_ locked: Bool) {
@@ -286,7 +304,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
                 self?.noteAuthFailure(request)
             }
             var lastClient = ""
-            let server = LocalHTTPServer(port: config.port) { [log] request in
+            // 토큰이 없는 요청은 헤더만 보고 끊어 본문을 기다리느라 자리를 막지 않게 한다.
+            let server = LocalHTTPServer(port: config.port, headCheck: { router.checkHead($0) }) { [log] request in
                 let response = router.handle(request)
                 // 워치는 5초마다 상태를 물어서 상태 요청은 접속 프로그램이 바뀔 때만 남긴다.
                 let client = String(request.headers["user-agent"]?.split(separator: " ").first ?? "?")

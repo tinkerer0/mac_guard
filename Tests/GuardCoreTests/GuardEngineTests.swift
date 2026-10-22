@@ -44,6 +44,21 @@ final class GuardEngineTests: XCTestCase {
         XCTAssertEqual(guardEngine.physicalInput(at: t0 + 12), [])
     }
 
+    /// 검토 F2: 첫 잠금이 실패하면 경계가 켜져 있어도 다시 잠그지 않았다.
+    func testLockRetriesWhileScreenStaysUnlocked() {
+        let guardEngine = engine(lockOnTouch: true)
+        guardEngine.arm(at: t0)
+        XCTAssertEqual(
+            guardEngine.physicalInput(at: t0 + 10),
+            [.lockScreen, .sendAlert(GuardAlert(kind: .touchedAndLocked, at: t0 + 10))]
+        )
+        XCTAssertEqual(guardEngine.physicalInput(at: t0 + 12), [])
+        XCTAssertEqual(guardEngine.physicalInput(at: t0 + 13), [.lockScreen])
+        XCTAssertEqual(guardEngine.physicalInput(at: t0 + 86_400), [.lockScreen, .sendAlert(GuardAlert(kind: .touchedAndLocked, at: t0 + 86_400))])
+        _ = guardEngine.screenLockChanged(locked: true, at: t0 + 86_401)
+        XCTAssertEqual(guardEngine.physicalInput(at: t0 + 86_410), [])
+    }
+
     func testArmCanChangeLockOnTouch() {
         let guardEngine = engine(lockOnTouch: true)
         guardEngine.arm(at: t0, lockOnTouch: false)

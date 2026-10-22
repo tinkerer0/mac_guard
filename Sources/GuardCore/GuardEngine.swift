@@ -80,12 +80,15 @@ public struct GuardStatus: Codable, Equatable, Sendable {
 
 /// 경계 상태와 알림·잠금 판단만 맡는다. 시각과 입출력은 호출하는 쪽이 넣는다.
 public final class GuardEngine {
+    /// 잠금을 요청했는데 이만큼 지나도 잠기지 않았으면 다음 입력 때 다시 요청한다.
+    public static let lockRetryInterval: TimeInterval = 3
+
     public private(set) var settings: GuardSettings
     public private(set) var armedAt: Date?
     public private(set) var screenLocked: Bool
     public private(set) var lastInputAt: Date?
     public private(set) var lastAlertAt: Date?
-    private var lockRequested = false
+    private var lockRequestedAt: Date?
 
     public init(settings: GuardSettings = GuardSettings(), screenLocked: Bool = false) {
         self.settings = settings
@@ -99,12 +102,12 @@ public final class GuardEngine {
         armedAt = now
         lastInputAt = nil
         lastAlertAt = nil
-        lockRequested = false
+        lockRequestedAt = nil
     }
 
     public func disarm() {
         armedAt = nil
-        lockRequested = false
+        lockRequestedAt = nil
     }
 
     public func setLockOnTouch(_ on: Bool) {
@@ -116,12 +119,16 @@ public final class GuardEngine {
         guard let armedAt, now.timeIntervalSince(armedAt) >= settings.armGrace else { return [] }
         lastInputAt = now
         var actions: [GuardAction] = []
-        if settings.lockOnTouch, !screenLocked, !lockRequested {
-            lockRequested = true
+        var firstLock = false
+        // 잠금이 실패하거나 늦어도 다음 입력 때 다시 요청한다(한 번 요청하고 끝내지 않는다).
+        if settings.lockOnTouch, !screenLocked,
+           lockRequestedAt.map({ now.timeIntervalSince($0) >= Self.lockRetryInterval }) ?? true {
+            firstLock = lockRequestedAt == nil
+            lockRequestedAt = now
             actions.append(.lockScreen)
         }
         let lockingNow = !actions.isEmpty
-        if !lockingNow, let lastAlertAt, now.timeIntervalSince(lastAlertAt) < settings.alertCooldown {
+        if !firstLock, let lastAlertAt, now.timeIntervalSince(lastAlertAt) < settings.alertCooldown {
             return actions
         }
         let kind: AlertKind = lockingNow ? .touchedAndLocked : (screenLocked ? .lockScreenInput : .touched)

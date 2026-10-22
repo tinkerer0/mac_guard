@@ -12,8 +12,11 @@ if [[ ${#token} -lt 32 ]]; then
   exit 1
 fi
 out="watch/App/Secrets.generated.swift"
-umask 077
-cat > "$out" <<EOF
+# 기존 파일의 권한을 물려받지 않도록 0600 임시 파일에 쓰고 통째로 바꿔 넣는다.
+tmp="$(mktemp "$out.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+chmod 600 "$tmp"
+cat > "$tmp" <<EOF
 // scripts/make-watch-secrets.sh가 만든 파일. git에 올리지 않는다.
 import Foundation
 
@@ -23,4 +26,6 @@ enum GuardSecrets {
     static let apnsEnvironment = "$environment"
 }
 EOF
+mv -f "$tmp" "$out"
+trap - EXIT
 echo "만들었어요: $out ($url, $environment)"

@@ -2,7 +2,7 @@ import Foundation
 
 public struct LockResult: Codable, Equatable, Sendable {
     public var locked: Bool
-    /// sac, pmset, dry-run, already-locked, failed
+    /// sac, dry-run, already-locked, unavailable
     public var method: String
     public var detail: String?
 
@@ -19,7 +19,8 @@ public protocol GuardService: AnyObject {
     func disarm() -> GuardStatus
     func setLockOnTouch(_ on: Bool) -> GuardStatus
     func lockNow() -> LockResult
-    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus
+    /// 등록을 저장하지 못하면 nil.
+    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus?
 }
 
 private struct ArmBody: Decodable { var lockOnTouch: Bool? }
@@ -41,6 +42,15 @@ public final class APIRouter {
         self.token = token
         self.service = service
         self.onAuthFailure = onAuthFailure
+    }
+
+    /// 본문을 기다리기 전에 헤더만으로 인증한다. 통과하면 nil.
+    public func checkHead(_ head: HTTPRequest) -> HTTPResponse? {
+        guard Self.isAuthorized(head, token: token) else {
+            onAuthFailure(head)
+            return .error(401, "unauthorized")
+        }
+        return nil
     }
 
     public func handle(_ request: HTTPRequest) -> HTTPResponse {
@@ -66,7 +76,10 @@ public final class APIRouter {
             guard let body = decode(WatchTokenBody.self, request.body), Self.isDeviceToken(body.token) else {
                 return .error(400, "bad token")
             }
-            return .json(200, service.registerWatch(deviceToken: body.token.lowercased(), environment: body.environment))
+            guard let status = service.registerWatch(deviceToken: body.token.lowercased(), environment: body.environment) else {
+                return .error(500, "state save failed")
+            }
+            return .json(200, status)
         case (_, let path) where Self.routes.contains(path):
             return .error(405, "method not allowed")
         default:
