@@ -81,7 +81,22 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 - 다시 빌드·설치해도 입력 모니터링 허용이 유지됨(개발 인증서 서명).
 - 워치 앱 시뮬레이터 빌드, 맥 앱 접속·푸시 토큰 등록, 워치 접속 코드와 맥 API 계약.
 
-아직 안 함:
+- 독립 보안 검토(Codex GPT-6-Astra, 2회, `work/orchestration/20261022-security-review/`): 인증 우회 0건.
+  결함 6건(느린 연결로 자리 고갈, 잠금 실패 뒤 재시도 없음, 요청 줄 제어 문자로 기록 위조, 토큰 파일 권한 상속,
+  임시 비밀 파일 ignore 누락, 폴더 링크 처리)을 재현한 뒤 고쳤다.
+- 외부 공개(Tailscale Funnel, `https://<맥>.ts.net` → 127.0.0.1:8787): 공개 경로에서 정상 토큰 200, 틀린·없는 토큰 401.
+  Tailscale 프록시 경유 느린 무토큰 연결 40개를 열어도 앱 쪽 연결은 0개, 정상 요청 200.
+
+남은 위험·미확인:
 - 잠긴 화면에서의 입력 감지(유휴 시간 보조) — 시험 때 바로 풀어 확인 못 함.
-- 바깥 중계(tailscale funnel). 독립 보안 검토(Codex) 결과를 반영한 뒤 켠다.
+- 같은 맥에서 자기 Funnel 주소로 들어오는 접속은 중계에 따라 끊긴다(외부 기기에서는 미확인).
+- 연결을 계속 퍼붓는 공격은 완전히 막지 못한다. 워치 빌드와 DerivedData에는 토큰이 들어간다(개인 빌드).
 - APNs 키 발급과 실제 푸시, 실제 워치 설치, 알림 "잠그기" 버튼 동작.
+
+## 외부 공개와 푸시
+
+```sh
+tailscale funnel --bg 8787        # 처음엔 tailnet에서 Funnel 허용 링크를 승인해야 한다
+tailscale funnel reset            # 끄기
+scripts/configure-push.sh         # ~/.config/mac_guard/AuthKey_<KeyID>.p8 를 둔 뒤 실행(키 내용은 읽지 않음)
+```
