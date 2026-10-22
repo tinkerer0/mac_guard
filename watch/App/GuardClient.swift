@@ -13,6 +13,7 @@ struct GuardStatusDTO: Decodable, Equatable {
     var alarmActive: Bool?
     var inputMonitoring: Bool
     var watchRegistered: Bool
+    var phoneRegistered: Bool?
     var pushConfigured: Bool
 }
 
@@ -67,6 +68,10 @@ struct GuardClient {
 
     func registerWatch(deviceToken: String, environment: String) async throws -> GuardStatusDTO {
         try await call("POST", "/v1/watch-token", body: ["token": deviceToken, "environment": environment])
+    }
+
+    func registerPhone(deviceToken: String, environment: String) async throws -> GuardStatusDTO {
+        try await call("POST", "/v1/phone-token", body: ["token": deviceToken, "environment": environment])
     }
 
     private func call<T: Decodable>(_ method: String, _ path: String, body: [String: Any]? = nil) async throws -> T {

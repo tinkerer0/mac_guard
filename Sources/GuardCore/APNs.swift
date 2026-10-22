@@ -67,7 +67,8 @@ public struct APNsMessage: Equatable, Sendable {
             return APNsMessage(
                 title: "맥북 잠금이 풀렸어요",
                 body: "\(time) 잠금이 풀려 경계와 알람을 껐어요. 본인이 아니면 확인하세요.",
-                category: infoCategory, collapseID: nil, kind: alert.kind
+                // 워치·아이폰이 같은 알림으로 알아보게 사건마다 같은 ID를 둔다.
+                category: infoCategory, collapseID: "mac-guard-unlocked-\(Int(alert.at.timeIntervalSince1970))", kind: alert.kind
             )
         }
     }
@@ -104,7 +105,7 @@ public struct APNsCredentials {
     }
 }
 
-/// 맥에서 워치로 직접 푸시를 보낸다. 키 파일 내용은 기록하지 않는다.
+/// 맥에서 워치·아이폰으로 직접 푸시를 보낸다. 키 파일 내용은 기록하지 않는다.
 public final class APNsSender {
     private let credentials: APNsCredentials
     private let topic: String
@@ -134,12 +135,19 @@ public final class APNsSender {
         return value
     }
 
-    public func request(for message: APNsMessage, deviceToken: String, environment: APNsEnvironment, now: Date = Date()) throws -> URLRequest {
+    /// topic을 안 주면 만들 때 받은 워치 앱 ID로 보낸다.
+    public func request(
+        for message: APNsMessage,
+        deviceToken: String,
+        environment: APNsEnvironment,
+        topic: String? = nil,
+        now: Date = Date()
+    ) throws -> URLRequest {
         var request = URLRequest(url: URL(string: "https://\(environment.host)/3/device/\(deviceToken)")!)
         request.httpMethod = "POST"
         request.timeoutInterval = 15
         request.setValue("bearer \(try bearer(now: now))", forHTTPHeaderField: "authorization")
-        request.setValue(topic, forHTTPHeaderField: "apns-topic")
+        request.setValue(topic ?? self.topic, forHTTPHeaderField: "apns-topic")
         request.setValue("alert", forHTTPHeaderField: "apns-push-type")
         request.setValue("10", forHTTPHeaderField: "apns-priority")
         // 10분이 지난 알림은 늦게라도 보내지 않는다.
@@ -156,11 +164,12 @@ public final class APNsSender {
         _ message: APNsMessage,
         to deviceToken: String,
         environment: APNsEnvironment,
+        topic: String? = nil,
         completion: @escaping (Result<Int, Error>, String?) -> Void
     ) {
         let request: URLRequest
         do {
-            request = try self.request(for: message, deviceToken: deviceToken, environment: environment)
+            request = try self.request(for: message, deviceToken: deviceToken, environment: environment, topic: topic)
         } catch {
             completion(.failure(error), nil)
             return

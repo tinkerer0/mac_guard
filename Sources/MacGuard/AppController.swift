@@ -8,7 +8,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     private let config: GuardConfig
     private let log: EventLog
     private let engine: GuardEngine
-    private var watch: WatchRegistration?
+    private var devices: DeviceRegistrations
     private var input: PhysicalInputMonitor?
     private var inputMonitoring = false
     private var permissionTimer: Timer?
@@ -31,7 +31,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         self.config = config
         log = EventLog(path: config.logFile)
         engine = GuardEngine(settings: config.settings, screenLocked: ScreenLocker.isScreenLocked())
-        watch = StateStore.loadWatch(from: config.stateFile)
+        devices = StateStore.load(from: config.stateFile)
         super.init()
     }
 
@@ -44,7 +44,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         ) { [weak self] _ in self?.didWake() }
         setUpPush()
         startServer()
-        log.write("started", "port=\(server?.port ?? 0) input=\(inputMonitoring) push=\(sender != nil) watch=\(watch != nil)")
+        log.write("started", "port=\(server?.port ?? 0) input=\(inputMonitoring) push=\(sender != nil) watch=\(devices.watch != nil) phone=\(devices.phone != nil)")
         refreshIcon()
     }
 
@@ -106,16 +106,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         return LockResult(locked: locked, method: method, detail: locked ? nil : "잠금 화면이 뜨지 않았어요")
     }
 
-    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? {
+    func registerDevice(_ role: DeviceRole, deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? {
         onMain {
-            let registration = WatchRegistration(deviceToken: deviceToken, environment: environment, registeredAt: Date())
-            watch = registration
+            devices[role] = WatchRegistration(deviceToken: deviceToken, environment: environment, registeredAt: Date())
             do {
-                try StateStore.saveWatch(registration, to: config.stateFile)
-                log.write("watch-registered", "env=\(environment?.rawValue ?? "-")")
+                try StateStore.save(devices, to: config.stateFile)
+                log.write("device-registered", "role=\(role.rawValue) env=\(environment?.rawValue ?? "-")")
                 return makeStatus()
             } catch {
-                // 지금 실행 중에는 쓰되, 다시 켜면 잊으므로 워치가 다시 등록하도록 실패로 답한다.
+                // 지금 실행 중에는 쓰되, 다시 켜면 잊으므로 기기가 다시 등록하도록 실패로 답한다.
                 log.write("state-save-failed", String(describing: error))
                 return nil
             }
@@ -293,23 +292,26 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         }
     }
 
+    /// 워치는 알람이 반복될 때마다, 아이폰은 처음 한 번만 받는다(DeviceRole.receives).
+    /// 두 기기에 같은 알림 ID로 보내 시스템이 같은 알림으로 알아볼 수 있게 한다.
     private func send(_ alert: GuardAlert) {
-        log.write("alert", "\(alert.kind.rawValue) locked=\(alert.screenLocked)")
-        guard let sender else {
+        log.write("alert", "\(alert.kind.rawValue) locked=\(alert.screenLocked) repeat=\(alert.isRepeat)")
+        guard let sender, let apns = config.apns else {
             log.write("push-skipped", pushProblem ?? "-")
             return
         }
-        guard let watch else {
-            log.write("push-skipped", "워치 등록 안 됨")
-            return
-        }
-        let environment = watch.environment ?? config.apns?.environment ?? .sandbox
-        sender.send(APNsMessage.make(for: alert), to: watch.deviceToken, environment: environment) { [log] result, reason in
-            switch result {
-            case .success(let status):
-                log.write("push", "status=\(status) reason=\(reason ?? "-")")
-            case .failure(let error):
-                log.write("push-failed", error.localizedDescription)
+        let message = APNsMessage.make(for: alert)
+        let targets = DeviceRole.allCases.filter { $0.receives(alert) }.compactMap { role in devices[role].map { (role, $0) } }
+        if targets.isEmpty { log.write("push-skipped", "등록된 기기 없음") }
+        for (role, device) in targets {
+            let topic = role == .watch ? apns.topic : apns.resolvedPhoneTopic
+            sender.send(message, to: device.deviceToken, environment: device.environment ?? apns.environment, topic: topic) { [log] result, reason in
+                switch result {
+                case .success(let status):
+                    log.write("push", "role=\(role.rawValue) status=\(status) reason=\(reason ?? "-")")
+                case .failure(let error):
+                    log.write("push-failed", "role=\(role.rawValue) \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -383,10 +385,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
             menu.addItem(action("입력 모니터링 허용하기…", #selector(openInputMonitoringSettings)))
         }
         if let serverProblem { menu.addItem(info("워치 연결 꺼짐: \(serverProblem)")) }
-        menu.addItem(info(watch == nil ? "워치 등록 안 됨" : "워치 등록됨"))
+        menu.addItem(info("워치 \(devices.watch == nil ? "등록 안 됨" : "등록됨") · 아이폰 \(devices.phone == nil ? "등록 안 됨" : "등록됨")"))
         if let pushProblem { menu.addItem(info("알림: \(pushProblem)")) }
         menu.addItem(.separator())
-        menu.addItem(action(status.armed ? "경계 끄기" : "경계 켜기(바로 잠금)", #selector(toggleArmed)))
+        menu.addItem(action(status.armed ? "경계 끄기" : "경계 켜기", #selector(toggleArmed)))
         menu.addItem(action("지금 잠그기", #selector(lockFromMenu)))
         menu.addItem(.separator())
         menu.addItem(action("종료", #selector(quit)))
@@ -426,7 +428,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     // MARK: - 기타
 
     private func makeStatus() -> GuardStatus {
-        engine.status(inputMonitoring: inputMonitoring, watchRegistered: watch != nil, pushConfigured: sender != nil)
+        engine.status(inputMonitoring: inputMonitoring, watchRegistered: devices.watch != nil, phoneRegistered: devices.phone != nil, pushConfigured: sender != nil)
     }
 
     private func onMain<T>(_ work: () -> T) -> T {

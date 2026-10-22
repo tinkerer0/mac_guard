@@ -2,7 +2,7 @@ name: MacGuardWatch
 options:
   bundleIdPrefix: com.jinwoo
 targets:
-  # 워치 앱을 아이폰을 거쳐 설치하려고 두는 아이폰 앱. 알림은 받지 않는다(워치 앱이 직접 받음).
+  # 워치 앱을 아이폰을 거쳐 설치하려고 두는 아이폰 앱. 알람의 첫 알림·정보 알림만 받는다(반복 알람은 워치 앱이 직접 받음).
   MacGuardPhone:
     type: application
     platform: iOS
@@ -10,7 +10,13 @@ targets:
     sources:
       - Phone
       - App/GuardClient.swift
+      - App/GuardNotifications.swift
       - App/Secrets.generated.swift
+    entitlements:
+      path: Support/MacGuardPhone.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.usernotifications.time-sensitive: true
     dependencies:
       - target: MacGuardWatch
     settings:

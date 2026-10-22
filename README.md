@@ -11,12 +11,15 @@
 | 맥 앱 | `Sources/MacGuard` | 메뉴 막대 앱. 실제 입력 감지, 잠금, 127.0.0.1 HTTP API, 워치로 푸시 |
 | 핵심 로직 | `Sources/GuardCore` | 경계 판단(`GuardEngine`), HTTP 파서·API, APNs JWT·요청, 설정. 단위 테스트 대상 |
 | 워치 앱 | `watch/App` (xcodegen) | 알람 받기(직접 푸시), 알람 끄기, 경계 켜기/끄기, 지금 잠그기 |
-| 아이폰 앱 | `watch/Phone` | 워치 앱을 아이폰을 거쳐 설치하는 그릇, 상태 보기·알람 끄기(알림은 받지 않음) |
+| 아이폰 앱 | `watch/Phone` | 워치 앱을 아이폰을 거쳐 설치하는 그릇, 상태 보기·알람 끄기, 알림 한 번(반복 알람은 워치만) |
 
-흐름: 경계 켜기(워치·아이폰·메뉴) → 맥이 바로 잠김 → (5초 유예 뒤) 잠긴 맥에 입력이나 깨어남 → 10초 안에 본인이 잠금을 풀지 않으면
+흐름: 경계 켜기(워치·아이폰·메뉴, 맥은 잠그지 않아 AI 작업이 계속 돎) → (5초 유예 뒤) 사람 입력이나 깨어남 → 바로 잠금 → 10초 안에 본인이 잠금을 풀지 않으면
 워치 알람 → 15초마다 반복 → 워치의 "알람 끄기"(5분간 새 알람 없음)·맥 잠금 해제·10분 경과 중 하나로 멈춤.
-본인이 Touch ID·비밀번호로 풀면 경계와 알람이 꺼지고 그 사실도 알린다. 잠그기에 실패했으면 만질 때 다시 잠근다.
-"알람 끄기"는 워치에서 맥으로 가야 해서 외부 연결(Funnel)이 켜져 있어야 한다.
+본인이 Touch ID·비밀번호로 풀면 경계와 알람이 꺼지고 그 사실도 알린다. 잠그기에 실패했으면 다음 입력 때(3초 간격) 다시 잠근다.
+"지금 잠그기"는 누르는 즉시 잠근다. 경계를 켜는 순간 잠그고 싶으면 설정 `lockOnArm: true`.
+아이폰은 알람의 첫 알림과 정보 알림(잠금 해제·알람 시간 초과)을 한 번씩만 받는다(`DeviceRole.receives`). 두 기기에 같은 알림 ID(`apns-collapse-id`)로 보낸다.
+Apple 문서는 이렇게 두 기기에 보내면 "가장 알맞은 한 곳에만" 보여 준다고 하므로, 아이폰을 쓰고 있을 때는 첫 알림이 아이폰에만 뜨고 워치는 다음 반복부터 울릴 수 있다(실기 미확인).
+"알람 끄기"와 워치·아이폰 등록은 기기에서 맥으로 가야 해서 외부 연결(Funnel)이 켜져 있어야 한다.
 
 ## 감지 방식
 
@@ -44,7 +47,7 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 ```json
 {
   "port": 8787,
-  "lockOnArm": true,
+  "lockOnArm": false,
   "armGraceSeconds": 5,
   "alarmDelaySeconds": 10,
   "alarmRepeatSeconds": 15,
@@ -64,7 +67,7 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 
 ## API (127.0.0.1만, `Authorization: Bearer <토큰>`)
 
-`GET /v1/status`, `POST /v1/arm {"lockOnTouch"?}`, `POST /v1/disarm`, `POST /v1/settings {"lockOnTouch"}`, `POST /v1/lock`, `POST /v1/watch-token {"token","environment"?}`.
+`GET /v1/status`, `POST /v1/arm {"lockOnTouch"?}`, `POST /v1/disarm`, `POST /v1/settings {"lockOnTouch"}`, `POST /v1/lock`, `POST /v1/ack`, `POST /v1/watch-token {"token","environment"?}`, `POST /v1/phone-token {"token","environment"?}`.
 토큰이 틀리면 경로가 있는지도 알려 주지 않고 401을 준다. 바깥에서 오는 요청은 중계(예: tailscale funnel)가 이 주소로 넘겨준다.
 
 ## 시스템 설정과 부하
@@ -97,7 +100,8 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 - 잠긴 화면에서의 입력 감지(유휴 시간 보조) — 시험 때 바로 풀어 확인 못 함.
 - 같은 맥에서 자기 Funnel 주소로 들어오는 접속은 중계에 따라 끊긴다(외부 기기에서는 미확인).
 - 연결을 계속 퍼붓는 공격은 완전히 막지 못한다. 워치 빌드와 DerivedData에는 토큰이 들어간다(개인 빌드).
-- APNs 키 발급과 실제 푸시, 워치 앱 설치(아이폰 Watch 앱 경유), 알람 반복 시 워치가 매번 울리는지(collapse-id), "알람 끄기" 버튼 동작.
+- APNs 키 발급과 실제 푸시, 알람 반복 시 워치가 매번 울리는지(collapse-id), "알람 끄기" 버튼 동작.
+- 아이폰·워치에 같은 알림을 보낼 때 실제로 어디에 뜨는지, 워치가 아이폰 사본을 기다리느라 늦게 울리는지(포럼 보고 약 13초, Apple 문서 아님).
 
 ## 외부 공개와 푸시
 

@@ -9,8 +9,8 @@ final class GuardEngineTests: XCTestCase {
         GuardEngine(settings: GuardSettings(lockOnArm: lockOnArm), screenLocked: screenLocked)
     }
 
-    private func alarm(_ at: Date, since: Date, locked: Bool = true) -> GuardAction {
-        .sendAlert(GuardAlert(kind: .alarm, at: at, since: since, screenLocked: locked))
+    private func alarm(_ at: Date, since: Date, locked: Bool = true, isRepeat: Bool = false) -> GuardAction {
+        .sendAlert(GuardAlert(kind: .alarm, at: at, since: since, screenLocked: locked, isRepeat: isRepeat))
     }
 
     /// 경계를 켜고 잠금 화면까지 뜬 상태.
@@ -65,7 +65,7 @@ final class GuardEngineTests: XCTestCase {
         // 울리는 동안 더 만져도 시작 시각이나 반복 간격이 바뀌지 않는다.
         XCTAssertEqual(guardEngine.physicalInput(at: t0 + 20), [])
         XCTAssertEqual(guardEngine.tick(at: t0 + 30), [])
-        XCTAssertEqual(guardEngine.tick(at: t0 + 31), [alarm(t0 + 31, since: t0 + 6)])
+        XCTAssertEqual(guardEngine.tick(at: t0 + 31), [alarm(t0 + 31, since: t0 + 6, isRepeat: true)])
         XCTAssertTrue(guardEngine.acknowledge(at: t0 + 32))
         XCTAssertFalse(guardEngine.isAlarmActive)
         XCTAssertEqual(guardEngine.tick(at: t0 + 60), [])
@@ -74,6 +74,19 @@ final class GuardEngineTests: XCTestCase {
         _ = guardEngine.physicalInput(at: t0 + 332)
         XCTAssertTrue(guardEngine.isAlarmPending)
         XCTAssertTrue(guardEngine.isArmed)
+        // 끈 뒤 새로 시작한 알람은 다시 첫 알림이라 아이폰도 받는다.
+        XCTAssertEqual(guardEngine.tick(at: t0 + 342), [alarm(t0 + 342, since: t0 + 332)])
+    }
+
+    func testPhoneGetsEveryAlertExceptAlarmRepeats() {
+        let first = GuardAlert(kind: .alarm, at: t0)
+        let again = GuardAlert(kind: .alarm, at: t0 + 15, isRepeat: true)
+        XCTAssertTrue(DeviceRole.watch.receives(first))
+        XCTAssertTrue(DeviceRole.watch.receives(again))
+        XCTAssertTrue(DeviceRole.phone.receives(first))
+        XCTAssertFalse(DeviceRole.phone.receives(again))
+        XCTAssertTrue(DeviceRole.phone.receives(GuardAlert(kind: .unlocked, at: t0)))
+        XCTAssertTrue(DeviceRole.phone.receives(GuardAlert(kind: .alarmTimedOut, at: t0)))
     }
 
     func testAcknowledgeWithoutAlarmDoesNothing() {

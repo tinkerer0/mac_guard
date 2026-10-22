@@ -1,7 +1,7 @@
 import Foundation
 
 public struct GuardSettings: Codable, Equatable, Sendable {
-    /// 경계를 켜면 바로 잠금 화면을 띄운다.
+    /// 경계를 켜면 바로 잠금 화면을 띄운다. 기본은 끔(경계 중에도 AI 작업이 멈추지 않게, 만질 때 잠근다).
     public var lockOnArm: Bool
     /// 경계를 켠 직후 본인 입력으로 보고 무시하는 시간(초).
     public var armGrace: TimeInterval
@@ -17,7 +17,7 @@ public struct GuardSettings: Codable, Equatable, Sendable {
     public var alarmSnooze: TimeInterval
 
     public init(
-        lockOnArm: Bool = true,
+        lockOnArm: Bool = false,
         armGrace: TimeInterval = 5,
         lockOnTouch: Bool = true,
         alarmDelay: TimeInterval = 10,
@@ -51,12 +51,15 @@ public struct GuardAlert: Equatable, Sendable {
     public let since: Date?
     /// 알람을 보낼 때 맥이 잠겨 있었는지.
     public let screenLocked: Bool
+    /// 같은 알람의 반복이면 true. 핸드폰에는 처음 한 번만 보낸다.
+    public let isRepeat: Bool
 
-    public init(kind: AlertKind, at: Date, since: Date? = nil, screenLocked: Bool = true) {
+    public init(kind: AlertKind, at: Date, since: Date? = nil, screenLocked: Bool = true, isRepeat: Bool = false) {
         self.kind = kind
         self.at = at
         self.since = since
         self.screenLocked = screenLocked
+        self.isRepeat = isRepeat
     }
 }
 
@@ -77,6 +80,7 @@ public struct GuardStatus: Codable, Equatable, Sendable {
     public var alarmActive: Bool
     public var inputMonitoring: Bool
     public var watchRegistered: Bool
+    public var phoneRegistered: Bool
     public var pushConfigured: Bool
 
     public init(
@@ -91,6 +95,7 @@ public struct GuardStatus: Codable, Equatable, Sendable {
         alarmActive: Bool = false,
         inputMonitoring: Bool,
         watchRegistered: Bool,
+        phoneRegistered: Bool = false,
         pushConfigured: Bool
     ) {
         self.armed = armed
@@ -104,6 +109,7 @@ public struct GuardStatus: Codable, Equatable, Sendable {
         self.alarmActive = alarmActive
         self.inputMonitoring = inputMonitoring
         self.watchRegistered = watchRegistered
+        self.phoneRegistered = phoneRegistered
         self.pushConfigured = pushConfigured
     }
 }
@@ -215,7 +221,7 @@ public final class GuardEngine {
         return [.sendAlert(GuardAlert(kind: .unlocked, at: now, screenLocked: false))]
     }
 
-    public func status(inputMonitoring: Bool, watchRegistered: Bool, pushConfigured: Bool) -> GuardStatus {
+    public func status(inputMonitoring: Bool, watchRegistered: Bool, phoneRegistered: Bool = false, pushConfigured: Bool) -> GuardStatus {
         GuardStatus(
             armed: isArmed,
             armedAt: armedAt,
@@ -228,14 +234,16 @@ public final class GuardEngine {
             alarmActive: isAlarmActive,
             inputMonitoring: inputMonitoring,
             watchRegistered: watchRegistered,
+            phoneRegistered: phoneRegistered,
             pushConfigured: pushConfigured
         )
     }
 
     private func alarmAction(at now: Date) -> GuardAction {
+        let isRepeat = alarmLastSentAt != nil
         alarmLastSentAt = now
         lastAlertAt = now
-        return .sendAlert(GuardAlert(kind: .alarm, at: now, since: alarmSince, screenLocked: screenLocked))
+        return .sendAlert(GuardAlert(kind: .alarm, at: now, since: alarmSince, screenLocked: screenLocked, isRepeat: isRepeat))
     }
 
     private func clearAlarm() {

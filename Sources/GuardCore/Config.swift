@@ -11,7 +11,22 @@ public struct APNsConfig: Codable, Equatable, Sendable {
     public var keyFile: String
     /// 워치 앱 번들 ID.
     public var topic: String
+    /// 아이폰 앱 번들 ID. 없으면 com.jinwoo.macguard.ios.
+    public var phoneTopic: String?
     public var environment: APNsEnvironment
+
+    public var resolvedPhoneTopic: String { phoneTopic ?? "com.jinwoo.macguard.ios" }
+}
+
+/// 알림을 받는 기기.
+public enum DeviceRole: String, Codable, Sendable, CaseIterable {
+    case watch
+    case phone
+
+    /// 워치는 모든 알림(알람 반복 포함)을, 핸드폰은 반복을 뺀 알림을 한 번씩 받는다.
+    public func receives(_ alert: GuardAlert) -> Bool {
+        self == .watch || !alert.isRepeat
+    }
 }
 
 /// ~/.config/mac_guard/config.json. 빠진 항목은 기본값을 쓴다.
@@ -22,7 +37,7 @@ public struct GuardConfig: Codable, Equatable, Sendable {
     public var tokenFile = "~/.config/mac_guard/api_token"
     public var stateFile = "~/.config/mac_guard/state.json"
     public var logFile = "~/Library/Logs/MacGuard/agent.log"
-    public var lockOnArm = true
+    public var lockOnArm = false
     public var armGraceSeconds: Double = 5
     public var lockOnTouch = true
     public var alarmDelaySeconds: Double = 10
@@ -103,16 +118,38 @@ public struct WatchRegistration: Codable, Equatable, Sendable {
     }
 }
 
-public enum StateStore {
-    public static func loadWatch(from path: String) -> WatchRegistration? {
-        guard let data = FileManager.default.contents(atPath: expandPath(path)) else { return nil }
-        return try? JSONDecoder.guardAPI.decode(WatchRegistration.self, from: data)
+public struct DeviceRegistrations: Codable, Equatable, Sendable {
+    public var watch: WatchRegistration?
+    public var phone: WatchRegistration?
+
+    public init(watch: WatchRegistration? = nil, phone: WatchRegistration? = nil) {
+        self.watch = watch
+        self.phone = phone
     }
 
-    public static func saveWatch(_ registration: WatchRegistration, to path: String) throws {
+    public subscript(role: DeviceRole) -> WatchRegistration? {
+        get { role == .watch ? watch : phone }
+        set { if role == .watch { watch = newValue } else { phone = newValue } }
+    }
+}
+
+public enum StateStore {
+    /// 예전 형식(워치 등록 하나만 저장)도 워치 등록으로 읽는다.
+    public static func load(from path: String) -> DeviceRegistrations {
+        guard let data = FileManager.default.contents(atPath: expandPath(path)) else { return DeviceRegistrations() }
+        if let both = try? JSONDecoder.guardAPI.decode(DeviceRegistrations.self, from: data), both.watch != nil || both.phone != nil {
+            return both
+        }
+        if let old = try? JSONDecoder.guardAPI.decode(WatchRegistration.self, from: data) {
+            return DeviceRegistrations(watch: old)
+        }
+        return DeviceRegistrations()
+    }
+
+    public static func save(_ registrations: DeviceRegistrations, to path: String) throws {
         let url = URL(fileURLWithPath: expandPath(path))
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder.guardAPI.encode(registration).write(to: url, options: .atomic)
+        try JSONEncoder.guardAPI.encode(registrations).write(to: url, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 }

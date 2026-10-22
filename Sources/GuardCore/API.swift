@@ -21,8 +21,8 @@ public protocol GuardService: AnyObject {
     func lockNow() -> LockResult
     /// 울리거나 울릴 참인 알람을 끈다.
     func acknowledgeAlarm() -> GuardStatus
-    /// 등록을 저장하지 못하면 nil.
-    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus?
+    /// 워치·핸드폰의 푸시 토큰 등록. 저장하지 못하면 nil.
+    func registerDevice(_ role: DeviceRole, deviceToken: String, environment: APNsEnvironment?) -> GuardStatus?
 }
 
 private struct ArmBody: Decodable { var lockOnTouch: Bool? }
@@ -34,7 +34,7 @@ private struct WatchTokenBody: Decodable {
 
 /// 워치가 부르는 API. 모든 경로가 같은 토큰을 요구하고, 토큰이 틀리면 경로 존재도 알려 주지 않는다.
 public final class APIRouter {
-    static let routes: Set<String> = ["/v1/status", "/v1/arm", "/v1/disarm", "/v1/settings", "/v1/lock", "/v1/ack", "/v1/watch-token"]
+    static let routes: Set<String> = ["/v1/status", "/v1/arm", "/v1/disarm", "/v1/settings", "/v1/lock", "/v1/ack", "/v1/watch-token", "/v1/phone-token"]
 
     private let token: String
     private let service: GuardService
@@ -76,11 +76,12 @@ public final class APIRouter {
             return .json(200, service.acknowledgeAlarm())
         case ("POST", "/v1/lock"):
             return .json(200, service.lockNow())
-        case ("POST", "/v1/watch-token"):
+        case ("POST", "/v1/watch-token"), ("POST", "/v1/phone-token"):
+            let role: DeviceRole = request.path == "/v1/phone-token" ? .phone : .watch
             guard let body = decode(WatchTokenBody.self, request.body), Self.isDeviceToken(body.token) else {
                 return .error(400, "bad token")
             }
-            guard let status = service.registerWatch(deviceToken: body.token.lowercased(), environment: body.environment) else {
+            guard let status = service.registerDevice(role, deviceToken: body.token.lowercased(), environment: body.environment) else {
                 return .error(500, "state save failed")
             }
             return .json(200, status)

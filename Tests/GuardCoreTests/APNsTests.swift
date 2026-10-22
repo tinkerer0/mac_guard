@@ -43,6 +43,11 @@ final class APNsTests: XCTestCase {
         XCTAssertEqual(request.url?.absoluteString, "https://api.sandbox.push.apple.com/3/device/\(deviceToken)")
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.value(forHTTPHeaderField: "apns-topic"), "com.jinwoo.macguard.watch")
+        // 아이폰에는 같은 알림을 아이폰 앱 ID로만 바꿔 보낸다.
+        let phone = try sender.request(for: message, deviceToken: deviceToken, environment: .sandbox, topic: "com.jinwoo.macguard.ios", now: t0)
+        XCTAssertEqual(phone.value(forHTTPHeaderField: "apns-topic"), "com.jinwoo.macguard.ios")
+        XCTAssertEqual(phone.value(forHTTPHeaderField: "apns-collapse-id"), request.value(forHTTPHeaderField: "apns-collapse-id"))
+        XCTAssertEqual(phone.httpBody, request.httpBody)
         XCTAssertEqual(request.value(forHTTPHeaderField: "apns-push-type"), "alert")
         XCTAssertEqual(request.value(forHTTPHeaderField: "apns-priority"), "10")
         XCTAssertEqual(request.value(forHTTPHeaderField: "apns-expiration"), "1800000600")
@@ -64,7 +69,7 @@ final class APNsTests: XCTestCase {
         for kind in [AlertKind.alarmTimedOut, .unlocked] {
             XCTAssertEqual(APNsMessage.make(for: GuardAlert(kind: kind, at: t0)).category, APNsMessage.infoCategory, kind.rawValue)
         }
-        XCTAssertNil(APNsMessage.make(for: GuardAlert(kind: .unlocked, at: t0)).collapseID)
+        XCTAssertEqual(APNsMessage.make(for: GuardAlert(kind: .unlocked, at: t0)).collapseID, "mac-guard-unlocked-1800000000")
         let unlocked = APNsMessage.make(for: GuardAlert(kind: .alarm, at: t0, since: t0, screenLocked: false), timeZone: seoul)
         XCTAssertTrue(unlocked.body.contains("잠기지 않았어요"))
     }

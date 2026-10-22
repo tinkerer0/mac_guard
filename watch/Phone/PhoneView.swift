@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 아이폰 앱은 워치 앱을 아이폰을 거쳐 설치하려고 둔 그릇이다.
-/// 알림은 워치 앱이 직접 받고, 여기서는 맥 상태를 보고 간단히 조작만 한다.
+/// 워치 앱을 아이폰을 거쳐 설치하는 그릇이자, 맥 상태를 보고 간단히 조작하는 화면.
+/// 알람은 워치에서 끌 때까지 울리고, 아이폰은 처음 한 번만 알림을 받는다.
 struct PhoneView: View {
     @State private var status: GuardStatusDTO?
     @State private var message: String?
@@ -19,6 +19,7 @@ struct PhoneView: View {
                         LabeledContent("만지면 바로 잠금", value: status.lockOnTouch ? "켜짐" : "꺼짐")
                         LabeledContent("입력 감지 권한", value: status.inputMonitoring ? "허용됨" : "필요")
                         LabeledContent("워치 알림 등록", value: status.watchRegistered ? "됨" : "안 됨")
+                        LabeledContent("아이폰 알림 등록", value: (status.phoneRegistered ?? false) ? "됨" : "안 됨")
                     } else {
                         Text(message ?? "맥에 연결하는 중…")
                             .foregroundStyle(.secondary)
@@ -34,7 +35,7 @@ struct PhoneView: View {
                 }
                 if let status {
                     Section {
-                        Button(status.armed ? "경계 끄기" : "경계 켜기(맥 바로 잠김)") {
+                        Button(status.armed ? "경계 끄기" : "경계 켜기") {
                             perform {
                                 if status.armed { return try await client.disarm() }
                                 return try await client.arm(lockOnTouch: status.lockOnTouch)
@@ -60,7 +61,7 @@ struct PhoneView: View {
                     Section { Text(message).font(.footnote) }
                 }
                 Section("워치 앱") {
-                    Text("iPhone의 Watch 앱 → 사용 가능한 앱에서 '맥 지킴이'를 설치하세요. 알림은 워치 앱이 받습니다.")
+                    Text("알람은 워치에서 끌 때까지 울리고, 아이폰에는 처음 한 번만 알림이 와요. 워치 앱은 iPhone의 Watch 앱 → 사용 가능한 앱에서 설치합니다.")
                         .font(.footnote)
                 }
             }

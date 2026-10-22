@@ -66,6 +66,7 @@ private final class FakeService: GuardService {
     var acks = 0
     var saveFails = false
     var registered: [(String, APNsEnvironment?)] = []
+    var roles: [DeviceRole] = []
     let sample = GuardStatus(
         armed: false, armedAt: nil, watchingFrom: nil, screenLocked: false, lockOnTouch: true,
         lastInputAt: nil, lastAlertAt: nil, inputMonitoring: true, watchRegistered: false, pushConfigured: false
@@ -77,7 +78,8 @@ private final class FakeService: GuardService {
     func setLockOnTouch(_ on: Bool) -> GuardStatus { sample }
     func lockNow() -> LockResult { locks += 1; return LockResult(locked: true, method: "dry-run") }
     func acknowledgeAlarm() -> GuardStatus { acks += 1; return sample }
-    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? {
+    func registerDevice(_ role: DeviceRole, deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? {
+        roles.append(role)
         registered.append((deviceToken, environment))
         return saveFails ? nil : sample
     }
@@ -147,6 +149,15 @@ final class APIRouterTests: XCTestCase {
         XCTAssertEqual(ok.status, 200)
         XCTAssertEqual(service.registered.first?.0, hex.lowercased())
         XCTAssertEqual(service.registered.first?.1, .sandbox)
+        XCTAssertEqual(service.roles, [.watch])
+    }
+
+    func testPhoneTokenRegistersPhone() {
+        let hex = String(repeating: "cd", count: 32)
+        XCTAssertEqual(router.handle(request("POST", "/v1/phone-token", body: #"{"token":"\#(hex)","environment":"sandbox"}"#)).status, 200)
+        XCTAssertEqual(service.roles, [.phone])
+        XCTAssertEqual(router.handle(request("GET", "/v1/phone-token")).status, 405)
+        XCTAssertEqual(router.handle(HTTPRequest(method: "POST", path: "/v1/phone-token")).status, 401)
     }
 
     func testAcknowledgeAlarm() {
@@ -280,5 +291,5 @@ private final class StubService: GuardService {
     func setLockOnTouch(_ on: Bool) -> GuardStatus { status }
     func lockNow() -> LockResult { LockResult(locked: false, method: "unavailable") }
     func acknowledgeAlarm() -> GuardStatus { status }
-    func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? { status }
+    func registerDevice(_ role: DeviceRole, deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? { status }
 }

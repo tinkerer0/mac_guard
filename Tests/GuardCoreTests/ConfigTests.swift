@@ -18,6 +18,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(config.port, 18787)
         XCTAssertTrue(config.dryRunLock)
         XCTAssertTrue(config.lockOnTouch)
+        XCTAssertFalse(config.lockOnArm)
         XCTAssertEqual(config.armGraceSeconds, 5)
         XCTAssertNil(config.apns)
     }
@@ -64,12 +65,25 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(lines[0].hasSuffix(#"GET /x\x0A2099-01-01T00:00:00Z\x09disarmed\x09reason=forged"#))
     }
 
-    func testWatchRegistrationRoundTripIsPrivate() throws {
+    func testDeviceRegistrationsRoundTripIsPrivate() throws {
         let file = dir.appendingPathComponent("sub/state.json").path
-        let registration = WatchRegistration(deviceToken: "abcd", environment: .sandbox, registeredAt: Date(timeIntervalSince1970: 1_800_000_000))
-        try StateStore.saveWatch(registration, to: file)
-        XCTAssertEqual(StateStore.loadWatch(from: file), registration)
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let devices = DeviceRegistrations(
+            watch: WatchRegistration(deviceToken: "abcd", environment: .sandbox, registeredAt: at),
+            phone: WatchRegistration(deviceToken: "ef01", environment: nil, registeredAt: at)
+        )
+        try StateStore.save(devices, to: file)
+        XCTAssertEqual(StateStore.load(from: file), devices)
         let permissions = try FileManager.default.attributesOfItem(atPath: file)[.posixPermissions] as? NSNumber
         XCTAssertEqual(permissions?.intValue, 0o600)
+    }
+
+    /// 예전 앱은 워치 등록 하나만 저장했다. 그 파일도 워치 등록으로 읽어야 다시 등록하지 않아도 된다.
+    func testLegacyWatchOnlyStateLoadsAsWatch() throws {
+        let file = dir.appendingPathComponent("old.json")
+        let old = WatchRegistration(deviceToken: "abcd", environment: .sandbox, registeredAt: Date(timeIntervalSince1970: 1_800_000_000))
+        try JSONEncoder.guardAPI.encode(old).write(to: file)
+        XCTAssertEqual(StateStore.load(from: file.path), DeviceRegistrations(watch: old))
+        XCTAssertEqual(StateStore.load(from: dir.appendingPathComponent("none.json").path), DeviceRegistrations())
     }
 }
