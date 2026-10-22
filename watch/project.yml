@@ -1,0 +1,39 @@
+name: MacGuardWatch
+options:
+  bundleIdPrefix: com.jinwoo
+targets:
+  MacGuardWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources: [App]
+    info:
+      path: Support/Info.plist
+      properties:
+        WKWatchOnly: true
+        CFBundleDisplayName: 맥 지킴이
+        # 시뮬레이터에서 http://127.0.0.1 로 맥 앱을 부를 때만 필요하다. 실제 주소는 https.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    entitlements:
+      path: Support/MacGuardWatch.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.usernotifications.time-sensitive: true
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.jinwoo.macguard.watch
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: Y35NBHS9WU
+        TARGETED_DEVICE_FAMILY: "4"
+        GENERATE_INFOPLIST_FILE: YES
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+schemes:
+  MacGuardWatch:
+    build:
+      targets:
+        MacGuardWatch: all
+    run:
+      config: Debug
