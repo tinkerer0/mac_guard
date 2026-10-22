@@ -7,7 +7,12 @@ enum ScreenLocker {
     private typealias LockFunction = @convention(c) () -> Int32
 
     static func isScreenLocked() -> Bool {
-        guard let info = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
+        lockState() ?? false
+    }
+
+    /// 세션 정보를 못 읽으면 nil(잠김·풀림을 모름).
+    static func lockState() -> Bool? {
+        guard let info = CGSessionCopyCurrentDictionary() as? [String: Any] else { return nil }
         return (info["CGSSessionScreenIsLocked"] as? NSNumber)?.boolValue ?? false
     }
 

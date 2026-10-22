@@ -124,6 +124,11 @@ public final class LocalHTTPServer {
                 slot.connection.cancel()
                 return
             }
+            // 이미 끊은 연결(밀려남·시간 초과)이나 오류가 난 연결에 늦게 온 데이터는 처리하지 않는다.
+            guard self.slots[ObjectIdentifier(slot.connection)] != nil, error == nil else {
+                self.close(slot)
+                return
+            }
             var buffer = buffer
             if let data { buffer.append(data) }
             if !slot.headComplete {
@@ -147,7 +152,7 @@ public final class LocalHTTPServer {
             case .invalid(let reason):
                 self.respond(slot, .error(400, reason))
             case .incomplete:
-                if isComplete || error != nil {
+                if isComplete {
                     self.close(slot)
                 } else {
                     self.receive(slot, buffer: buffer)

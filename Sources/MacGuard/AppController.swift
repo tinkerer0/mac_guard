@@ -177,18 +177,21 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     /// 잠금·해제 알림은 다른 프로그램도 보낼 수 있어 실제 화면 상태로 다시 확인한다.
-    /// 알림과 실제 상태가 다르면 0.5초 뒤 한 번 더 보고 실제 상태를 따른다.
+    /// 알림과 실제 상태가 다르면 0.5초·2초 뒤 다시 보고 그때의 실제 상태를 따른다(상태 전환이 알림보다 늦는 경우).
+    /// 세션 정보를 못 읽으면 알림을 따른다.
     private func lockNotification(claimed: Bool) {
-        let actual = ScreenLocker.isScreenLocked()
+        let actual = ScreenLocker.lockState() ?? claimed
         guard actual != claimed else {
             screenLockChanged(actual)
             return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self else { return }
-            let later = ScreenLocker.isScreenLocked()
-            if later != claimed { self.log.write("lock-notification-ignored", "claimed=\(claimed) actual=\(later)") }
-            self.screenLockChanged(later)
+        for delay in [0.5, 2.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else { return }
+                let later = ScreenLocker.lockState() ?? claimed
+                if later != claimed { self.log.write("lock-notification-ignored", "claimed=\(claimed) actual=\(later) after=\(delay)s") }
+                if later != self.engine.screenLocked { self.screenLockChanged(later) }
+            }
         }
     }
 

@@ -9,11 +9,16 @@ final class GuardModel: ObservableObject {
     @Published var message: String?
 
     private let client = GuardClient(baseURL: GuardSecrets.baseURL, token: GuardSecrets.token)
+    /// 맥에 아직 등록하지 못한 푸시 토큰. 다음에 맥과 연결되면 다시 등록한다.
+    private var pendingToken: String?
 
     func refresh() async {
         do {
             status = try await client.status()
             reachable = true
+            if let pendingToken, status?.watchRegistered == false {
+                await registerWatchToken(pendingToken)
+            }
         } catch {
             reachable = false
             message = describe(error)
@@ -65,7 +70,9 @@ final class GuardModel: ObservableObject {
     func registerWatchToken(_ hex: String) async {
         do {
             status = try await client.registerWatch(deviceToken: hex, environment: GuardSecrets.apnsEnvironment)
+            pendingToken = nil
         } catch {
+            pendingToken = hex
             message = "워치 등록 실패: \(describe(error))"
         }
     }
