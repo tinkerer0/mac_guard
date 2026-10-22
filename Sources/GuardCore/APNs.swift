@@ -34,9 +34,9 @@ public enum APNsJWT {
 }
 
 public struct APNsMessage: Equatable, Sendable {
-    /// 잠그기 버튼이 붙는 알림.
-    public static let alertCategory = "MAC_GUARD_ALERT"
-    /// 이미 잠겼거나 경계가 끝나 버튼이 필요 없는 알림.
+    /// '알람 끄기' 버튼이 붙는 알림.
+    public static let alarmCategory = "MAC_GUARD_ALARM"
+    /// 버튼이 필요 없는 알림.
     public static let infoCategory = "MAC_GUARD_INFO"
 
     public var title: String
@@ -48,28 +48,25 @@ public struct APNsMessage: Equatable, Sendable {
     public static func make(for alert: GuardAlert, timeZone: TimeZone = .current) -> APNsMessage {
         let time = clock(alert.at, timeZone: timeZone)
         switch alert.kind {
-        case .touched:
+        case .alarm:
+            let since = clock(alert.since ?? alert.at, timeZone: timeZone)
             return APNsMessage(
                 title: "맥북을 누가 만지고 있어요",
-                body: "\(time) 키보드·트랙패드 입력을 감지했어요.",
-                category: alertCategory, collapseID: "mac-guard-touch", kind: alert.kind
+                body: alert.screenLocked
+                    ? "\(since)부터 잠긴 맥북에 입력이 있어요. 끄려면 '알람 끄기'."
+                    : "\(since)부터 입력이 있는데 맥북이 잠기지 않았어요. 끄려면 '알람 끄기'.",
+                category: alarmCategory, collapseID: "mac-guard-alarm", kind: alert.kind
             )
-        case .touchedAndLocked:
+        case .alarmTimedOut:
             return APNsMessage(
-                title: "맥북을 누가 만져서 잠갔어요",
-                body: "\(time) 입력을 감지하고 잠금 화면을 띄웠어요.",
-                category: infoCategory, collapseID: "mac-guard-touch", kind: alert.kind
-            )
-        case .lockScreenInput:
-            return APNsMessage(
-                title: "잠긴 맥북에 누가 입력하고 있어요",
-                body: "\(time) 잠금 화면에서 입력을 감지했어요.",
-                category: infoCategory, collapseID: "mac-guard-touch", kind: alert.kind
+                title: "맥북 알람을 멈췄어요",
+                body: "\(time) 최대 시간이 지나 알람을 멈췄어요. 경계는 켜져 있어요.",
+                category: infoCategory, collapseID: "mac-guard-alarm", kind: alert.kind
             )
         case .unlocked:
             return APNsMessage(
                 title: "맥북 잠금이 풀렸어요",
-                body: "\(time) 잠금이 풀려 경계를 껐어요. 본인이 아니면 확인하세요.",
+                body: "\(time) 잠금이 풀려 경계와 알람을 껐어요. 본인이 아니면 확인하세요.",
                 category: infoCategory, collapseID: nil, kind: alert.kind
             )
         }

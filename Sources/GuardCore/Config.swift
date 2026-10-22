@@ -22,9 +22,13 @@ public struct GuardConfig: Codable, Equatable, Sendable {
     public var tokenFile = "~/.config/mac_guard/api_token"
     public var stateFile = "~/.config/mac_guard/state.json"
     public var logFile = "~/Library/Logs/MacGuard/agent.log"
-    public var alertCooldownSeconds: Double = 30
+    public var lockOnArm = true
     public var armGraceSeconds: Double = 5
     public var lockOnTouch = true
+    public var alarmDelaySeconds: Double = 10
+    public var alarmRepeatSeconds: Double = 15
+    public var alarmMaxSeconds: Double = 600
+    public var alarmSnoozeSeconds: Double = 300
     /// 시험용: 잠금 대신 기록만 남긴다.
     public var dryRunLock = false
     public var apns: APNsConfig?
@@ -38,9 +42,13 @@ public struct GuardConfig: Codable, Equatable, Sendable {
         tokenFile = try container.decodeIfPresent(String.self, forKey: .tokenFile) ?? defaults.tokenFile
         stateFile = try container.decodeIfPresent(String.self, forKey: .stateFile) ?? defaults.stateFile
         logFile = try container.decodeIfPresent(String.self, forKey: .logFile) ?? defaults.logFile
-        alertCooldownSeconds = try container.decodeIfPresent(Double.self, forKey: .alertCooldownSeconds) ?? defaults.alertCooldownSeconds
+        lockOnArm = try container.decodeIfPresent(Bool.self, forKey: .lockOnArm) ?? defaults.lockOnArm
         armGraceSeconds = try container.decodeIfPresent(Double.self, forKey: .armGraceSeconds) ?? defaults.armGraceSeconds
         lockOnTouch = try container.decodeIfPresent(Bool.self, forKey: .lockOnTouch) ?? defaults.lockOnTouch
+        alarmDelaySeconds = try container.decodeIfPresent(Double.self, forKey: .alarmDelaySeconds) ?? defaults.alarmDelaySeconds
+        alarmRepeatSeconds = try container.decodeIfPresent(Double.self, forKey: .alarmRepeatSeconds) ?? defaults.alarmRepeatSeconds
+        alarmMaxSeconds = try container.decodeIfPresent(Double.self, forKey: .alarmMaxSeconds) ?? defaults.alarmMaxSeconds
+        alarmSnoozeSeconds = try container.decodeIfPresent(Double.self, forKey: .alarmSnoozeSeconds) ?? defaults.alarmSnoozeSeconds
         dryRunLock = try container.decodeIfPresent(Bool.self, forKey: .dryRunLock) ?? defaults.dryRunLock
         apns = try container.decodeIfPresent(APNsConfig.self, forKey: .apns)
     }
@@ -52,7 +60,15 @@ public struct GuardConfig: Codable, Equatable, Sendable {
     }
 
     public var settings: GuardSettings {
-        GuardSettings(alertCooldown: alertCooldownSeconds, armGrace: armGraceSeconds, lockOnTouch: lockOnTouch)
+        GuardSettings(
+            lockOnArm: lockOnArm,
+            armGrace: armGraceSeconds,
+            lockOnTouch: lockOnTouch,
+            alarmDelay: alarmDelaySeconds,
+            alarmRepeat: alarmRepeatSeconds,
+            alarmMaxDuration: alarmMaxSeconds,
+            alarmSnooze: alarmSnoozeSeconds
+        )
     }
 }
 

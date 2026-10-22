@@ -10,10 +10,13 @@
 | --- | --- | --- |
 | 맥 앱 | `Sources/MacGuard` | 메뉴 막대 앱. 실제 입력 감지, 잠금, 127.0.0.1 HTTP API, 워치로 푸시 |
 | 핵심 로직 | `Sources/GuardCore` | 경계 판단(`GuardEngine`), HTTP 파서·API, APNs JWT·요청, 설정. 단위 테스트 대상 |
-| 워치 앱 | `watch/` (xcodegen) | 경계 켜기/끄기, 만지면 바로 잠금 설정, 지금 잠그기, 알림의 "잠그기" 버튼 |
+| 워치 앱 | `watch/App` (xcodegen) | 알람 받기(직접 푸시), 알람 끄기, 경계 켜기/끄기, 지금 잠그기 |
+| 아이폰 앱 | `watch/Phone` | 워치 앱을 아이폰을 거쳐 설치하는 그릇, 상태 보기·알람 끄기(알림은 받지 않음) |
 
-흐름: 경계 켜기(워치 또는 메뉴) → 5초 유예 → 실제 입력 감지 → 바로 잠금(기본) + 워치 알림 → 본인이 Touch ID·비밀번호로 풀면 경계가 자동으로 꺼지고 그 사실도 알린다.
-"만지면 바로 잠금"을 끄면 알림에 붙은 "잠그기" 버튼으로 잠근다.
+흐름: 경계 켜기(워치·아이폰·메뉴) → 맥이 바로 잠김 → (5초 유예 뒤) 잠긴 맥에 입력이나 깨어남 → 10초 안에 본인이 잠금을 풀지 않으면
+워치 알람 → 15초마다 반복 → 워치의 "알람 끄기"(5분간 새 알람 없음)·맥 잠금 해제·10분 경과 중 하나로 멈춤.
+본인이 Touch ID·비밀번호로 풀면 경계와 알람이 꺼지고 그 사실도 알린다. 잠그기에 실패했으면 만질 때 다시 잠근다.
+"알람 끄기"는 워치에서 맥으로 가야 해서 외부 연결(Funnel)이 켜져 있어야 한다.
 
 ## 감지 방식
 
@@ -41,14 +44,17 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 ```json
 {
   "port": 8787,
-  "lockOnTouch": true,
+  "lockOnArm": true,
   "armGraceSeconds": 5,
-  "alertCooldownSeconds": 30,
+  "alarmDelaySeconds": 10,
+  "alarmRepeatSeconds": 15,
+  "alarmMaxSeconds": 600,
+  "alarmSnoozeSeconds": 300,
   "apns": {
     "teamID": "Y35NBHS9WU",
     "keyID": "<APNs 키 ID>",
     "keyFile": "~/.config/mac_guard/AuthKey_<키 ID>.p8",
-    "topic": "com.jinwoo.macguard.watch",
+    "topic": "com.jinwoo.macguard.ios.watchkitapp",
     "environment": "sandbox"
   }
 }
@@ -91,7 +97,7 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 - 잠긴 화면에서의 입력 감지(유휴 시간 보조) — 시험 때 바로 풀어 확인 못 함.
 - 같은 맥에서 자기 Funnel 주소로 들어오는 접속은 중계에 따라 끊긴다(외부 기기에서는 미확인).
 - 연결을 계속 퍼붓는 공격은 완전히 막지 못한다. 워치 빌드와 DerivedData에는 토큰이 들어간다(개인 빌드).
-- APNs 키 발급과 실제 푸시, 실제 워치 설치, 알림 "잠그기" 버튼 동작.
+- APNs 키 발급과 실제 푸시, 워치 앱 설치(아이폰 Watch 앱 경유), 알람 반복 시 워치가 매번 울리는지(collapse-id), "알람 끄기" 버튼 동작.
 
 ## 외부 공개와 푸시
 

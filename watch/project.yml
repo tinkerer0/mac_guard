@@ -2,6 +2,29 @@ name: MacGuardWatch
 options:
   bundleIdPrefix: com.jinwoo
 targets:
+  # 워치 앱을 아이폰을 거쳐 설치하려고 두는 아이폰 앱. 알림은 받지 않는다(워치 앱이 직접 받음).
+  MacGuardPhone:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - Phone
+      - App/GuardClient.swift
+      - App/Secrets.generated.swift
+    dependencies:
+      - target: MacGuardWatch
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.jinwoo.macguard.ios
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: Y35NBHS9WU
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: 맥 지킴이
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
   MacGuardWatch:
     type: application
     platform: watchOS
@@ -10,8 +33,9 @@ targets:
     info:
       path: Support/Info.plist
       properties:
-        WKWatchOnly: true
         CFBundleDisplayName: 맥 지킴이
+        WKCompanionAppBundleIdentifier: com.jinwoo.macguard.ios
+        WKRunsIndependentlyOfCompanionApp: true
         # 시뮬레이터에서 http://127.0.0.1 로 맥 앱을 부를 때만 필요하다. 실제 주소는 https.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
@@ -23,7 +47,7 @@ targets:
     settings:
       base:
         SWIFT_VERSION: "5.0"
-        PRODUCT_BUNDLE_IDENTIFIER: com.jinwoo.macguard.watch
+        PRODUCT_BUNDLE_IDENTIFIER: com.jinwoo.macguard.ios.watchkitapp
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: Y35NBHS9WU
         TARGETED_DEVICE_FAMILY: "4"
@@ -31,6 +55,13 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
 schemes:
+  MacGuardPhone:
+    build:
+      targets:
+        MacGuardPhone: all
+        MacGuardWatch: all
+    run:
+      config: Debug
   MacGuardWatch:
     build:
       targets:

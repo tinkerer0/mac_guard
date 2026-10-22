@@ -36,7 +36,7 @@ final class APNsTests: XCTestCase {
             credentials: APNsCredentials(teamID: "TEAM123456", keyID: "KEY1234567", key: P256.Signing.PrivateKey()),
             topic: "com.jinwoo.macguard.watch"
         )
-        let message = APNsMessage.make(for: GuardAlert(kind: .touched, at: t0), timeZone: seoul)
+        let message = APNsMessage.make(for: GuardAlert(kind: .alarm, at: t0, since: t0 - 10), timeZone: seoul)
         let deviceToken = String(repeating: "ab", count: 32)
         let request = try sender.request(for: message, deviceToken: deviceToken, environment: .sandbox, now: t0)
 
@@ -46,25 +46,27 @@ final class APNsTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "apns-push-type"), "alert")
         XCTAssertEqual(request.value(forHTTPHeaderField: "apns-priority"), "10")
         XCTAssertEqual(request.value(forHTTPHeaderField: "apns-expiration"), "1800000600")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "apns-collapse-id"), "mac-guard-touch")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "apns-collapse-id"), "mac-guard-alarm")
         XCTAssertTrue(request.value(forHTTPHeaderField: "authorization")?.hasPrefix("bearer ey") ?? false)
 
         let payload = try JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any]
         let aps = payload?["aps"] as? [String: Any]
         let alert = aps?["alert"] as? [String: String]
         XCTAssertEqual(alert?["title"], "맥북을 누가 만지고 있어요")
-        XCTAssertEqual(alert?["body"], "17:00:00 키보드·트랙패드 입력을 감지했어요.")
-        XCTAssertEqual(aps?["category"] as? String, APNsMessage.alertCategory)
+        XCTAssertEqual(alert?["body"], "16:59:50부터 잠긴 맥북에 입력이 있어요. 끄려면 '알람 끄기'.")
+        XCTAssertEqual(aps?["category"] as? String, APNsMessage.alarmCategory)
         XCTAssertEqual(aps?["interruption-level"] as? String, "time-sensitive")
-        XCTAssertEqual(payload?["kind"] as? String, "touched")
+        XCTAssertEqual(payload?["kind"] as? String, "alarm")
     }
 
-    func testOnlyUnlockedTouchGetsLockButton() {
-        XCTAssertEqual(APNsMessage.make(for: GuardAlert(kind: .touched, at: t0)).category, APNsMessage.alertCategory)
-        for kind in [AlertKind.touchedAndLocked, .lockScreenInput, .unlocked] {
+    func testOnlyAlarmGetsAckButton() {
+        XCTAssertEqual(APNsMessage.make(for: GuardAlert(kind: .alarm, at: t0)).category, APNsMessage.alarmCategory)
+        for kind in [AlertKind.alarmTimedOut, .unlocked] {
             XCTAssertEqual(APNsMessage.make(for: GuardAlert(kind: kind, at: t0)).category, APNsMessage.infoCategory, kind.rawValue)
         }
         XCTAssertNil(APNsMessage.make(for: GuardAlert(kind: .unlocked, at: t0)).collapseID)
+        let unlocked = APNsMessage.make(for: GuardAlert(kind: .alarm, at: t0, since: t0, screenLocked: false), timeZone: seoul)
+        XCTAssertTrue(unlocked.body.contains("잠기지 않았어요"))
     }
 
     func testTokenIsReusedForFiftyMinutes() throws {

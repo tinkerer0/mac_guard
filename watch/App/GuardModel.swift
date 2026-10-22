@@ -67,6 +67,19 @@ final class GuardModel: ObservableObject {
         }
     }
 
+    func acknowledgeAlarm() async {
+        busy = true
+        defer { busy = false }
+        do {
+            status = try await client.acknowledgeAlarm()
+            reachable = true
+            message = "알람을 껐어요"
+            WKInterfaceDevice.current().play(.success)
+        } catch {
+            fail(error)
+        }
+    }
+
     func registerWatchToken(_ hex: String) async {
         do {
             status = try await client.registerWatch(deviceToken: hex, environment: GuardSecrets.apnsEnvironment)

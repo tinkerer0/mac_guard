@@ -28,7 +28,7 @@ config["apns"] = {
     "teamID": "Y35NBHS9WU",
     "keyID": key_id,
     "keyFile": key,
-    "topic": "com.jinwoo.macguard.watch",
+    "topic": os.environ.get("MAC_GUARD_PUSH_TOPIC", "com.jinwoo.macguard.ios.watchkitapp"),
     "environment": environment,
 }
 tmp = path + ".tmp"

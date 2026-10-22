@@ -15,6 +15,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     private var lockWatcher: LockStateWatcher?
     private var wakeObserver: NSObjectProtocol?
     private var idleTimer: Timer?
+    private var tickTimer: Timer?
     private var lastIdle: Double?
     private var lastInputLog = Date.distantPast
     private var server: LocalHTTPServer?
@@ -40,10 +41,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         lockWatcher = LockStateWatcher { [weak self] claimed in self?.lockNotification(claimed: claimed) }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.log.write("wake")
-            self?.syncMonitoring()
-        }
+        ) { [weak self] _ in self?.didWake() }
         setUpPush()
         startServer()
         log.write("started", "port=\(server?.port ?? 0) input=\(inputMonitoring) push=\(sender != nil) watch=\(watch != nil)")
@@ -58,9 +56,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
 
     func arm(lockOnTouch: Bool?) -> GuardStatus {
         onMain {
-            engine.arm(at: Date(), lockOnTouch: lockOnTouch)
-            log.write("armed", "lockOnTouch=\(engine.settings.lockOnTouch) grace=\(Int(engine.settings.armGrace))s")
-            syncMonitoring()
+            let actions = engine.arm(at: Date(), lockOnTouch: lockOnTouch)
+            log.write("armed", "lockOnArm=\(engine.settings.lockOnArm) grace=\(Int(engine.settings.armGrace))s")
+            apply(actions)
             refreshIcon()
             return makeStatus()
         }
@@ -80,6 +78,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         onMain {
             engine.setLockOnTouch(on)
             log.write("lock-on-touch", on ? "on" : "off")
+            return makeStatus()
+        }
+    }
+
+    func acknowledgeAlarm() -> GuardStatus {
+        onMain {
+            if engine.acknowledge(at: Date()) {
+                log.write("alarm-acked", "snooze=\(Int(engine.settings.alarmSnooze))s")
+            }
+            syncMonitoring()
+            refreshIcon()
             return makeStatus()
         }
     }
@@ -140,9 +149,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         permissionTimer = timer
     }
 
-    /// 경계 중에만 입력 탭을 켜고, 경계 중이면서 잠긴 동안에만 유휴 시간을 본다.
+    /// 경계 중에만 입력 탭·알람 시계를 켜고, 경계 중이면서 잠긴 동안에만 유휴 시간을 본다.
     private func syncMonitoring() {
         input?.setActive(engine.isArmed)
+        if engine.isArmed, tickTimer == nil {
+            let timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+            timer.tolerance = 0.3
+            tickTimer = timer
+        } else if !engine.isArmed, let timer = tickTimer {
+            timer.invalidate()
+            tickTimer = nil
+        }
         let watchIdle = engine.isArmed && engine.screenLocked
         if watchIdle, idleTimer == nil {
             lastIdle = nil
@@ -159,14 +176,29 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     private func physicalInput(source: String) {
-        // 왜 잠겼는지 나중에 볼 수 있게 경계 중 감지는 5초에 한 줄만 남긴다.
+        // 왜 알람이 울렸는지 나중에 볼 수 있게 경계 중 감지는 5초에 한 줄만 남긴다.
         let now = Date()
         if engine.isArmed, now.timeIntervalSince(lastInputLog) >= 5 {
             lastInputLog = now
             log.write("input", "source=\(source) locked=\(engine.screenLocked)")
         }
+        let wasPending = engine.isAlarmPending
         apply(engine.physicalInput(at: now))
+        if !wasPending, engine.isAlarmPending {
+            log.write("alarm-pending", "delay=\(Int(engine.settings.alarmDelay))s")
+        }
         refreshIcon()
+    }
+
+    private func tick() {
+        apply(engine.tick(at: Date()))
+    }
+
+    /// 경계 중에 맥이 깨어났다면 누가 뚜껑을 열거나 키를 눌렀다고 보고 입력과 똑같이 다룬다.
+    private func didWake() {
+        log.write("wake", engine.isArmed ? "armed" : "")
+        syncMonitoring()
+        if engine.isArmed { physicalInput(source: "wake") }
     }
 
     /// AI 화면 조작 같은 합성 입력은 무시하되, 어느 프로그램이 보냈는지는 남긴다.
@@ -222,12 +254,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         for action in actions {
             switch action {
             case .lockScreen:
-                requestLock(reason: "touch")
-            case .sendAlert(let alert) where alert.kind == .touchedAndLocked:
-                // 잠금 화면이 실제로 떴는지 본 뒤 알린다. 안 떴으면 잠그기 버튼이 붙은 알림으로 바꾼다.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                    self?.confirmTouchLock(alert)
-                }
+                requestLock(reason: "guard")
             case .sendAlert(let alert):
                 send(alert)
             }
@@ -250,17 +277,6 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         return method
     }
 
-    private func confirmTouchLock(_ alert: GuardAlert) {
-        let locked = config.dryRunLock || ScreenLocker.isScreenLocked()
-        log.write("lock-check", "reason=touch locked=\(locked)")
-        if locked, !config.dryRunLock {
-            // 잠김 알림이 늦게 와도 잠긴 화면 기준으로 판단하게 한다.
-            _ = engine.screenLockChanged(locked: true, at: Date())
-            syncMonitoring()
-        }
-        send(locked ? alert : GuardAlert(kind: .touched, at: alert.at))
-    }
-
     // MARK: - 알림
 
     private func setUpPush() {
@@ -278,7 +294,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     private func send(_ alert: GuardAlert) {
-        log.write("alert", alert.kind.rawValue)
+        log.write("alert", "\(alert.kind.rawValue) locked=\(alert.screenLocked)")
         guard let sender else {
             log.write("push-skipped", pushProblem ?? "-")
             return
@@ -349,17 +365,20 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     private func refreshIcon() {
-        let armed = engine.isArmed
+        let symbol = engine.isAlarmActive ? "bell.and.waves.left.and.right.fill" : (engine.isArmed ? "lock.shield.fill" : "lock.shield")
         statusItem?.button?.image = NSImage(
-            systemSymbolName: armed ? "lock.shield.fill" : "lock.shield",
-            accessibilityDescription: armed ? "맥 지킴이: 경계 중" : "맥 지킴이: 꺼짐"
+            systemSymbolName: symbol,
+            accessibilityDescription: engine.isAlarmActive ? "맥 지킴이: 알람" : (engine.isArmed ? "맥 지킴이: 경계 중" : "맥 지킴이: 꺼짐")
         )
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let status = makeStatus()
-        menu.addItem(info(status.armed ? "경계 중" : "경계 꺼짐"))
+        menu.addItem(info(status.alarmActive ? "알람 울리는 중" : (status.armed ? "경계 중" : "경계 꺼짐")))
+        if status.alarmActive || status.alarmPending {
+            menu.addItem(action("알람 끄기", #selector(acknowledgeFromMenu)))
+        }
         if !inputMonitoring {
             menu.addItem(action("입력 모니터링 허용하기…", #selector(openInputMonitoringSettings)))
         }
@@ -367,10 +386,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         menu.addItem(info(watch == nil ? "워치 등록 안 됨" : "워치 등록됨"))
         if let pushProblem { menu.addItem(info("알림: \(pushProblem)")) }
         menu.addItem(.separator())
-        menu.addItem(action(status.armed ? "경계 끄기" : "경계 켜기", #selector(toggleArmed)))
-        let lockOnTouch = action("만지면 바로 잠금", #selector(toggleLockOnTouch))
-        lockOnTouch.state = status.lockOnTouch ? .on : .off
-        menu.addItem(lockOnTouch)
+        menu.addItem(action(status.armed ? "경계 끄기" : "경계 켜기(바로 잠금)", #selector(toggleArmed)))
         menu.addItem(action("지금 잠그기", #selector(lockFromMenu)))
         menu.addItem(.separator())
         menu.addItem(action("종료", #selector(quit)))
@@ -390,8 +406,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         _ = engine.isArmed ? disarm() : arm(lockOnTouch: nil)
     }
 
-    @objc private func toggleLockOnTouch() {
-        _ = setLockOnTouch(!engine.settings.lockOnTouch)
+    @objc private func acknowledgeFromMenu() {
+        _ = acknowledgeAlarm()
     }
 
     @objc private func lockFromMenu() {

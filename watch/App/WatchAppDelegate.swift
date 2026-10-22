@@ -3,14 +3,14 @@ import WatchKit
 
 enum GuardNotifications {
     /// 맥 앱(APNsMessage)과 같은 이름을 써야 버튼이 붙는다.
-    static let alertCategory = "MAC_GUARD_ALERT"
+    static let alarmCategory = "MAC_GUARD_ALARM"
     static let infoCategory = "MAC_GUARD_INFO"
-    static let lockAction = "MAC_GUARD_LOCK"
+    static let acknowledgeAction = "MAC_GUARD_ACK"
 
     static var categories: Set<UNNotificationCategory> {
-        let lock = UNNotificationAction(identifier: lockAction, title: "잠그기", options: [.foreground])
+        let acknowledge = UNNotificationAction(identifier: acknowledgeAction, title: "알람 끄기", options: [.foreground])
         return [
-            UNNotificationCategory(identifier: alertCategory, actions: [lock], intentIdentifiers: [], options: []),
+            UNNotificationCategory(identifier: alarmCategory, actions: [acknowledge], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: infoCategory, actions: [], intentIdentifiers: [], options: []),
         ]
     }
@@ -50,12 +50,12 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotificatio
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        guard response.actionIdentifier == GuardNotifications.lockAction else {
+        guard response.actionIdentifier == GuardNotifications.acknowledgeAction else {
             completionHandler()
             return
         }
         Task { @MainActor in
-            await self.model.lockNow()
+            await self.model.acknowledgeAlarm()
             completionHandler()
         }
     }

@@ -9,6 +9,8 @@ struct GuardStatusDTO: Decodable, Equatable {
     var lockOnTouch: Bool
     var lastInputAt: Date?
     var lastAlertAt: Date?
+    var alarmPending: Bool?
+    var alarmActive: Bool?
     var inputMonitoring: Bool
     var watchRegistered: Bool
     var pushConfigured: Bool
@@ -29,6 +31,10 @@ enum GuardClientError: LocalizedError {
         case .http(let code): return "맥 응답 오류 \(code)"
         }
     }
+}
+
+extension GuardStatusDTO {
+    var isAlarming: Bool { (alarmActive ?? false) || (alarmPending ?? false) }
 }
 
 struct GuardClient {
@@ -53,6 +59,10 @@ struct GuardClient {
 
     func lock() async throws -> LockResultDTO {
         try await call("POST", "/v1/lock")
+    }
+
+    func acknowledgeAlarm() async throws -> GuardStatusDTO {
+        try await call("POST", "/v1/ack")
     }
 
     func registerWatch(deviceToken: String, environment: String) async throws -> GuardStatusDTO {

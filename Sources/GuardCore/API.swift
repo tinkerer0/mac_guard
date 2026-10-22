@@ -19,6 +19,8 @@ public protocol GuardService: AnyObject {
     func disarm() -> GuardStatus
     func setLockOnTouch(_ on: Bool) -> GuardStatus
     func lockNow() -> LockResult
+    /// 울리거나 울릴 참인 알람을 끈다.
+    func acknowledgeAlarm() -> GuardStatus
     /// 등록을 저장하지 못하면 nil.
     func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus?
 }
@@ -32,7 +34,7 @@ private struct WatchTokenBody: Decodable {
 
 /// 워치가 부르는 API. 모든 경로가 같은 토큰을 요구하고, 토큰이 틀리면 경로 존재도 알려 주지 않는다.
 public final class APIRouter {
-    static let routes: Set<String> = ["/v1/status", "/v1/arm", "/v1/disarm", "/v1/settings", "/v1/lock", "/v1/watch-token"]
+    static let routes: Set<String> = ["/v1/status", "/v1/arm", "/v1/disarm", "/v1/settings", "/v1/lock", "/v1/ack", "/v1/watch-token"]
 
     private let token: String
     private let service: GuardService
@@ -70,6 +72,8 @@ public final class APIRouter {
         case ("POST", "/v1/settings"):
             guard let body = decode(SettingsBody.self, request.body) else { return .error(400, "bad body") }
             return .json(200, service.setLockOnTouch(body.lockOnTouch))
+        case ("POST", "/v1/ack"):
+            return .json(200, service.acknowledgeAlarm())
         case ("POST", "/v1/lock"):
             return .json(200, service.lockNow())
         case ("POST", "/v1/watch-token"):

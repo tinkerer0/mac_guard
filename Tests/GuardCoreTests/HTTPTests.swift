@@ -63,6 +63,7 @@ final class HTTPParserTests: XCTestCase {
 private final class FakeService: GuardService {
     var armedWith: [Bool?] = []
     var locks = 0
+    var acks = 0
     var saveFails = false
     var registered: [(String, APNsEnvironment?)] = []
     let sample = GuardStatus(
@@ -75,6 +76,7 @@ private final class FakeService: GuardService {
     func disarm() -> GuardStatus { sample }
     func setLockOnTouch(_ on: Bool) -> GuardStatus { sample }
     func lockNow() -> LockResult { locks += 1; return LockResult(locked: true, method: "dry-run") }
+    func acknowledgeAlarm() -> GuardStatus { acks += 1; return sample }
     func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? {
         registered.append((deviceToken, environment))
         return saveFails ? nil : sample
@@ -145,6 +147,13 @@ final class APIRouterTests: XCTestCase {
         XCTAssertEqual(ok.status, 200)
         XCTAssertEqual(service.registered.first?.0, hex.lowercased())
         XCTAssertEqual(service.registered.first?.1, .sandbox)
+    }
+
+    func testAcknowledgeAlarm() {
+        XCTAssertEqual(router.handle(request("POST", "/v1/ack")).status, 200)
+        XCTAssertEqual(router.handle(request("GET", "/v1/ack")).status, 405)
+        XCTAssertEqual(router.handle(HTTPRequest(method: "POST", path: "/v1/ack")).status, 401)
+        XCTAssertEqual(service.acks, 1)
     }
 
     func testWatchTokenSaveFailureIsReported() {
@@ -270,5 +279,6 @@ private final class StubService: GuardService {
     func disarm() -> GuardStatus { status }
     func setLockOnTouch(_ on: Bool) -> GuardStatus { status }
     func lockNow() -> LockResult { LockResult(locked: false, method: "unavailable") }
+    func acknowledgeAlarm() -> GuardStatus { status }
     func registerWatch(deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? { status }
 }

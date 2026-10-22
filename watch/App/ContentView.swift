@@ -6,6 +6,16 @@ struct ContentView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
+                if let status = model.status, status.isAlarming {
+                    Button {
+                        Task { await model.acknowledgeAlarm() }
+                    } label: {
+                        Label("알람 끄기", systemImage: "bell.slash.fill")
+                            .font(.headline)
+                    }
+                    .tint(.red)
+                    .disabled(model.busy)
+                }
                 header
                 if let status = model.status {
                     Button {
@@ -15,12 +25,6 @@ struct ContentView: View {
                               systemImage: status.armed ? "shield.slash" : "lock.shield")
                     }
                     .tint(status.armed ? .gray : .green)
-                    .disabled(model.busy)
-
-                    Toggle("만지면 바로 잠금", isOn: Binding(
-                        get: { status.lockOnTouch },
-                        set: { on in Task { await model.setLockOnTouch(on) } }
-                    ))
                     .disabled(model.busy)
                 }
                 if model.reachable != false {
@@ -62,10 +66,10 @@ struct ContentView: View {
             }
         } else if let status = model.status {
             VStack(spacing: 2) {
-                Label(status.armed ? "경계 중" : "경계 꺼짐",
-                      systemImage: status.armed ? "lock.shield.fill" : "lock.shield")
+                Label(status.isAlarming ? "알람" : (status.armed ? "경계 중" : "경계 꺼짐"),
+                      systemImage: status.isAlarming ? "bell.and.waves.left.and.right.fill" : (status.armed ? "lock.shield.fill" : "lock.shield"))
                     .font(.headline)
-                    .foregroundStyle(status.armed ? .green : .secondary)
+                    .foregroundStyle(status.isAlarming ? .red : (status.armed ? .green : .secondary))
                 if status.armed, let from = status.watchingFrom, from > Date() {
                     Text("곧 감시 시작")
                         .font(.caption2)
