@@ -23,6 +23,11 @@ final class ConfigTests: XCTestCase {
         XCTAssertNil(config.apns)
     }
 
+    func testScreenViewIsOffUnlessSet() throws {
+        XCTAssertFalse(GuardConfig().screenView)
+        XCTAssertTrue(try JSONDecoder().decode(GuardConfig.self, from: Data(#"{"screenView": true}"#.utf8)).screenView)
+    }
+
     func testMissingFileGivesDefaults() throws {
         XCTAssertEqual(try GuardConfig.load(path: dir.appendingPathComponent("none.json").path), GuardConfig())
     }

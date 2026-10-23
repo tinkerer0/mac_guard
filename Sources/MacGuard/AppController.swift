@@ -3,7 +3,7 @@ import CoreGraphics
 import GuardCore
 
 /// 이 앱이 바꾸는 것은 자기 파일(~/.config/mac_guard, ~/Library/Logs/MacGuard)과 잠금 화면뿐이다.
-/// 전원·잠자기·화면·Lid Mode 설정은 읽지도 바꾸지도 않는다.
+/// 전원·잠자기·화면·Lid Mode 설정은 읽지도 바꾸지도 않는다. 화면 보기는 화면을 깨우지 않고 그림을 파일로 남기지 않는다.
 final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, GuardService {
     private let config: GuardConfig
     private let log: EventLog
@@ -26,6 +26,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     // 서버 큐에서만 바뀐다.
     private var authFailures = 0
     private var authFailureWindow = Date.distantPast
+    private var lastScreenshotAt = Date.distantPast
 
     init(config: GuardConfig) {
         self.config = config
@@ -44,7 +45,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         ) { [weak self] _ in self?.didWake() }
         setUpPush()
         startServer()
-        log.write("started", "port=\(server?.port ?? 0) input=\(inputMonitoring) push=\(sender != nil) watch=\(devices.watch != nil) phone=\(devices.phone != nil)")
+        if config.screenView, !ScreenGrabber.hasPermission() {
+            log.write("screen-capture-missing")
+            ScreenGrabber.requestPermission()
+        }
+        log.write("started", "port=\(server?.port ?? 0) input=\(inputMonitoring) push=\(sender != nil) watch=\(devices.watch != nil) phone=\(devices.phone != nil) screen=\(config.screenView)")
         refreshIcon()
     }
 
@@ -119,6 +124,33 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
                 return nil
             }
         }
+    }
+
+    /// 상태 확인은 메인에서 하고, 찍기는 메인을 벗어나 HTTP 큐에서 기다린다(최대 2초, 연결 시간 제한 3초 안).
+    func screenshot(_ request: ScreenRequest) -> ScreenShotResult {
+        if let refusal = onMain({ screenRefusal() }) {
+            log.write("screen-refused", "code=\(refusal.rawValue)")
+            return .refused(refusal)
+        }
+        let now = Date()
+        guard now.timeIntervalSince(lastScreenshotAt) >= 1 else { return .refused(.tooSoon) }
+        lastScreenshotAt = now
+        guard let jpeg = ScreenGrabber.capture(request, timeout: 2) else {
+            log.write("screen-refused", "code=\(ScreenRefusal.captureFailed.rawValue)")
+            return .refused(.captureFailed)
+        }
+        return .jpeg(jpeg)
+    }
+
+    /// 자리를 비웠을 때 AI 작업을 확인하는 용도라, 경계 중이면서 잠기지 않았고 화면이 켜져 있을 때만 찍는다.
+    /// 잠김 여부를 못 읽으면 잠긴 것으로 본다.
+    private func screenRefusal() -> ScreenRefusal? {
+        if !config.screenView { return .disabled }
+        if !engine.isArmed { return .disarmed }
+        if ScreenLocker.lockState() ?? true { return .locked }
+        if ScreenGrabber.isDisplayAsleep() { return .displayAsleep }
+        if !ScreenGrabber.hasPermission() { return .permission }
+        return nil
     }
 
     // MARK: - 감지와 잠금
@@ -384,6 +416,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         if !inputMonitoring {
             menu.addItem(action("입력 모니터링 허용하기…", #selector(openInputMonitoringSettings)))
         }
+        if config.screenView {
+            if ScreenGrabber.hasPermission() {
+                menu.addItem(info("화면 보기: 경계 중에만"))
+            } else {
+                menu.addItem(action("화면 기록 허용하기…", #selector(openScreenCaptureSettings)))
+            }
+        }
         if let serverProblem { menu.addItem(info("워치 연결 꺼짐: \(serverProblem)")) }
         menu.addItem(info("워치 \(devices.watch == nil ? "등록 안 됨" : "등록됨") · 아이폰 \(devices.phone == nil ? "등록 안 됨" : "등록됨")"))
         if let pushProblem { menu.addItem(info("알림: \(pushProblem)")) }
@@ -419,6 +458,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     @objc private func openInputMonitoringSettings() {
         _ = CGRequestListenEventAccess()
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")!)
+    }
+
+    @objc private func openScreenCaptureSettings() {
+        ScreenGrabber.requestPermission()
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
     }
 
     @objc private func quit() {

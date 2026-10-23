@@ -106,12 +106,16 @@ public enum HTTPParser {
 }
 
 public struct HTTPResponse: Equatable, Sendable {
+    public static let jsonType = "application/json; charset=utf-8"
+
     public let status: Int
     public let body: Data
+    public let contentType: String
 
-    public init(status: Int, body: Data) {
+    public init(status: Int, body: Data, contentType: String = HTTPResponse.jsonType) {
         self.status = status
         self.body = body
+        self.contentType = contentType
     }
 
     public static func json<T: Encodable>(_ status: Int, _ value: T) -> HTTPResponse {
@@ -122,9 +126,13 @@ public struct HTTPResponse: Equatable, Sendable {
         json(status, ["error": message])
     }
 
+    public static func jpeg(_ data: Data) -> HTTPResponse {
+        HTTPResponse(status: 200, body: data, contentType: "image/jpeg")
+    }
+
     public func serialized() -> Data {
         var head = "HTTP/1.1 \(status) \(Self.reason(status))\r\n"
-        head += "Content-Type: application/json; charset=utf-8\r\n"
+        head += "Content-Type: \(contentType)\r\n"
         head += "Content-Length: \(body.count)\r\n"
         head += "Cache-Control: no-store\r\n"
         head += "Connection: close\r\n\r\n"
@@ -136,8 +144,11 @@ public struct HTTPResponse: Equatable, Sendable {
         case 200: return "OK"
         case 400: return "Bad Request"
         case 401: return "Unauthorized"
+        case 403: return "Forbidden"
         case 404: return "Not Found"
         case 405: return "Method Not Allowed"
+        case 409: return "Conflict"
+        case 429: return "Too Many Requests"
         case 500: return "Internal Server Error"
         case 503: return "Service Unavailable"
         default: return "Error"

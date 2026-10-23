@@ -83,6 +83,12 @@ private final class FakeService: GuardService {
         registered.append((deviceToken, environment))
         return saveFails ? nil : sample
     }
+    var screenRequests: [ScreenRequest] = []
+    var screenResult = ScreenShotResult.jpeg(Data([0xFF, 0xD8, 0xFF]))
+    func screenshot(_ request: ScreenRequest) -> ScreenShotResult {
+        screenRequests.append(request)
+        return screenResult
+    }
 }
 
 final class APIRouterTests: XCTestCase {
@@ -165,6 +171,37 @@ final class APIRouterTests: XCTestCase {
         XCTAssertEqual(router.handle(request("GET", "/v1/ack")).status, 405)
         XCTAssertEqual(router.handle(HTTPRequest(method: "POST", path: "/v1/ack")).status, 401)
         XCTAssertEqual(service.acks, 1)
+    }
+
+    func testScreenNeedsTokenBeforeCapture() {
+        XCTAssertEqual(router.handle(HTTPRequest(method: "POST", path: "/v1/screen")).status, 401)
+        XCTAssertEqual(router.checkHead(HTTPRequest(method: "POST", path: "/v1/screen"))?.status, 401)
+        XCTAssertEqual(router.handle(request("GET", "/v1/screen")).status, 405)
+        XCTAssertTrue(service.screenRequests.isEmpty)
+    }
+
+    func testScreenReturnsJPEGOrRefusalCode() throws {
+        let whole = router.handle(request("POST", "/v1/screen"))
+        XCTAssertEqual(whole.status, 200)
+        XCTAssertEqual(whole.contentType, "image/jpeg")
+        XCTAssertEqual(whole.body, Data([0xFF, 0xD8, 0xFF]))
+        XCTAssertTrue(String(decoding: whole.serialized(), as: UTF8.self).contains("Content-Type: image/jpeg\r\n"))
+
+        let body = #"{"width":900,"region":{"x":0.5,"y":0.25,"width":0.3,"height":0.3}}"#
+        XCTAssertEqual(router.handle(request("POST", "/v1/screen", body: body)).status, 200)
+        XCTAssertEqual(router.handle(request("POST", "/v1/screen", body: "nope")).status, 400)
+        XCTAssertEqual(service.screenRequests, [
+            ScreenRequest(),
+            ScreenRequest(width: 900, region: ScreenRegion(x: 0.5, y: 0.25, width: 0.3, height: 0.3)),
+        ])
+
+        for (refusal, status) in [(ScreenRefusal.locked, 409), (.displayAsleep, 409), (.permission, 403), (.tooSoon, 429)] {
+            service.screenResult = .refused(refusal)
+            let response = router.handle(request("POST", "/v1/screen"))
+            XCTAssertEqual(response.status, status)
+            XCTAssertEqual(response.contentType, HTTPResponse.jsonType)
+            XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: response.body), ["error": refusal.rawValue])
+        }
     }
 
     func testWatchTokenSaveFailureIsReported() {
@@ -292,4 +329,5 @@ private final class StubService: GuardService {
     func lockNow() -> LockResult { LockResult(locked: false, method: "unavailable") }
     func acknowledgeAlarm() -> GuardStatus { status }
     func registerDevice(_ role: DeviceRole, deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? { status }
+    func screenshot(_ request: ScreenRequest) -> ScreenShotResult { .refused(.disabled) }
 }

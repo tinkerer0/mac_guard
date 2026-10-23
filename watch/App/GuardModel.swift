@@ -8,7 +8,7 @@ final class GuardModel: ObservableObject {
     @Published private(set) var busy = false
     @Published var message: String?
 
-    private let client = GuardClient(baseURL: GuardSecrets.baseURL, token: GuardSecrets.token)
+    let client = GuardClient(baseURL: GuardSecrets.baseURL, token: GuardSecrets.token)
     /// 맥에 아직 등록하지 못한 푸시 토큰. 다음에 맥과 연결되면 다시 등록한다.
     private var pendingToken: String?
 

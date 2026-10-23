@@ -11,6 +11,7 @@ targets:
       - Phone
       - App/GuardClient.swift
       - App/GuardNotifications.swift
+      - App/ScreenView.swift
       - App/Secrets.generated.swift
     entitlements:
       path: Support/MacGuardPhone.entitlements

@@ -41,6 +41,9 @@ struct PhoneView: View {
                                 return try await client.arm(lockOnTouch: status.lockOnTouch)
                             }
                         }
+                        NavigationLink("화면 보기") {
+                            ScreenView(client: client, pixelWidth: 1200)
+                        }
                         Button("지금 잠그기", role: .destructive) {
                             Task {
                                 busy = true

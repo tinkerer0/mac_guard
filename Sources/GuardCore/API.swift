@@ -23,6 +23,8 @@ public protocol GuardService: AnyObject {
     func acknowledgeAlarm() -> GuardStatus
     /// 워치·핸드폰의 푸시 토큰 등록. 저장하지 못하면 nil.
     func registerDevice(_ role: DeviceRole, deviceToken: String, environment: APNsEnvironment?) -> GuardStatus?
+    /// 맥 화면을 한 장 찍는다. 찍는 동안 이 요청을 처리하는 큐를 잠깐 막는다.
+    func screenshot(_ request: ScreenRequest) -> ScreenShotResult
 }
 
 private struct ArmBody: Decodable { var lockOnTouch: Bool? }
@@ -34,7 +36,7 @@ private struct WatchTokenBody: Decodable {
 
 /// 워치가 부르는 API. 모든 경로가 같은 토큰을 요구하고, 토큰이 틀리면 경로 존재도 알려 주지 않는다.
 public final class APIRouter {
-    static let routes: Set<String> = ["/v1/status", "/v1/arm", "/v1/disarm", "/v1/settings", "/v1/lock", "/v1/ack", "/v1/watch-token", "/v1/phone-token"]
+    static let routes: Set<String> = ["/v1/status", "/v1/arm", "/v1/disarm", "/v1/settings", "/v1/lock", "/v1/ack", "/v1/watch-token", "/v1/phone-token", "/v1/screen"]
 
     private let token: String
     private let service: GuardService
@@ -76,6 +78,15 @@ public final class APIRouter {
             return .json(200, service.acknowledgeAlarm())
         case ("POST", "/v1/lock"):
             return .json(200, service.lockNow())
+        case ("POST", "/v1/screen"):
+            let body = request.body.isEmpty ? ScreenRequest() : decode(ScreenRequest.self, request.body)
+            guard let body else { return .error(400, "bad body") }
+            switch service.screenshot(body) {
+            case .jpeg(let data):
+                return .jpeg(data)
+            case .refused(let reason):
+                return .error(reason.status, reason.rawValue)
+            }
         case ("POST", "/v1/watch-token"), ("POST", "/v1/phone-token"):
             let role: DeviceRole = request.path == "/v1/phone-token" ? .phone : .watch
             guard let body = decode(WatchTokenBody.self, request.body), Self.isDeviceToken(body.token) else {

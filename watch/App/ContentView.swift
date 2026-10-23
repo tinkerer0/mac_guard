@@ -4,6 +4,12 @@ struct ContentView: View {
     @ObservedObject var model: GuardModel
 
     var body: some View {
+        NavigationStack {
+            controls
+        }
+    }
+
+    private var controls: some View {
         ScrollView {
             VStack(spacing: 10) {
                 if let status = model.status, status.isAlarming {
@@ -35,6 +41,14 @@ struct ContentView: View {
                     }
                     .tint(.red)
                     .disabled(model.busy)
+                }
+                if model.status != nil {
+                    // 경계 중이면서 맥이 풀려 있을 때만 맥이 찍어 준다(자리 비운 동안 AI 작업 확인).
+                    NavigationLink {
+                        ScreenView(client: model.client, pixelWidth: 450)
+                    } label: {
+                        Label("화면 보기", systemImage: "display")
+                    }
                 }
 
                 if model.reachable != false, let message = model.message {

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// 맥 앱 GuardStatus와 같은 모양.
@@ -25,11 +26,20 @@ struct LockResultDTO: Decodable, Equatable {
 
 enum GuardClientError: LocalizedError {
     case http(Int)
+    /// 맥이 화면 보기를 거절한 이유(맥 앱 ScreenRefusal 코드).
+    case screen(String)
 
     var errorDescription: String? {
         switch self {
         case .http(401): return "토큰이 맞지 않아요"
         case .http(let code): return "맥 응답 오류 \(code)"
+        case .screen("disabled"): return "맥에서 화면 보기가 꺼져 있어요"
+        case .screen("disarmed"): return "경계 중일 때만 볼 수 있어요"
+        case .screen("locked"): return "맥이 잠겨 있어요"
+        case .screen("display-asleep"): return "맥 화면이 꺼져 있어요"
+        case .screen("permission"): return "맥에서 화면 기록을 허용해야 해요"
+        case .screen("too-soon"): return "잠시 뒤 다시 눌러 주세요"
+        case .screen: return "화면을 찍지 못했어요"
         }
     }
 }
@@ -74,7 +84,31 @@ struct GuardClient {
         try await call("POST", "/v1/phone-token", body: ["token": deviceToken, "environment": environment])
     }
 
+    /// 맥 화면 한 장(JPEG). region은 화면 전체를 가로·세로 0~1로 본 부분, nil이면 전체.
+    func screen(width: Int, region: CGRect?) async throws -> Data {
+        var body: [String: Any] = ["width": width]
+        if let region {
+            body["region"] = ["x": region.minX, "y": region.minY, "width": region.width, "height": region.height]
+        }
+        let (data, code) = try await send("POST", "/v1/screen", body: body)
+        guard code == 200 else {
+            guard code != 401, let reason = (try? JSONDecoder().decode([String: String].self, from: data))?["error"] else {
+                throw GuardClientError.http(code)
+            }
+            throw GuardClientError.screen(reason)
+        }
+        return data
+    }
+
     private func call<T: Decodable>(_ method: String, _ path: String, body: [String: Any]? = nil) async throws -> T {
+        let (data, code) = try await send(method, path, body: body)
+        guard code == 200 else { throw GuardClientError.http(code) }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(T.self, from: data)
+    }
+
+    private func send(_ method: String, _ path: String, body: [String: Any]?) async throws -> (Data, Int) {
         var request = URLRequest(url: baseURL.appending(path: path))
         request.httpMethod = method
         request.timeoutInterval = 10
@@ -84,10 +118,6 @@ struct GuardClient {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
         let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200 else { throw GuardClientError.http(code) }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(T.self, from: data)
+        return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
 }

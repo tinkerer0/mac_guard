@@ -46,6 +46,8 @@ public struct GuardConfig: Codable, Equatable, Sendable {
     public var alarmSnoozeSeconds: Double = 300
     /// 시험용: 잠금 대신 기록만 남긴다.
     public var dryRunLock = false
+    /// 워치·아이폰에서 맥 화면 보기. 켜도 경계 중이면서 잠기지 않고 화면이 켜져 있을 때만 찍는다.
+    public var screenView = false
     public var apns: APNsConfig?
 
     public init() {}
@@ -65,6 +67,7 @@ public struct GuardConfig: Codable, Equatable, Sendable {
         alarmMaxSeconds = try container.decodeIfPresent(Double.self, forKey: .alarmMaxSeconds) ?? defaults.alarmMaxSeconds
         alarmSnoozeSeconds = try container.decodeIfPresent(Double.self, forKey: .alarmSnoozeSeconds) ?? defaults.alarmSnoozeSeconds
         dryRunLock = try container.decodeIfPresent(Bool.self, forKey: .dryRunLock) ?? defaults.dryRunLock
+        screenView = try container.decodeIfPresent(Bool.self, forKey: .screenView) ?? defaults.screenView
         apns = try container.decodeIfPresent(APNsConfig.self, forKey: .apns)
     }
 
