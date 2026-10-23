@@ -282,6 +282,36 @@ final class LocalHTTPServerTests: XCTestCase {
     }
 
     /// 검토 Q1: 토큰 없는 요청이 본문을 덜 보낸 채 자리를 막지 못한다(헤더만 보고 바로 401).
+    /// 화면 보기 재검토 Q1: 본문이 늦게 오고 처리도 오래 걸려 3초를 넘겨도, 응답을 보내기 시작한 연결은 시간 제한으로 끊지 않는다.
+    func testLateBodyWithSlowHandlerStillGetsResponse() throws {
+        let server = LocalHTTPServer(port: 0, timeout: 3) { _ in
+            Thread.sleep(forTimeInterval: 1.5)
+            return .json(200, ["ok": true])
+        }
+        try server.start()
+        defer { server.stop() }
+        let queue = clientQueue
+        let connection = NWConnection(host: .ipv4(.loopback), port: NWEndpoint.Port(rawValue: server.port)!, using: .tcp)
+        let done = DispatchSemaphore(value: 0)
+        var response = ""
+        connection.stateUpdateHandler = { state in
+            guard case .ready = state else { return }
+            connection.send(content: Data("POST /v1/screen HTTP/1.1\r\nContent-Length: 2\r\n\r\n".utf8), completion: .contentProcessed { _ in
+                queue.asyncAfter(deadline: .now() + 2) {
+                    connection.send(content: Data("{}".utf8), completion: .contentProcessed { _ in })
+                }
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 16384) { data, _, _, _ in
+                    response = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                    done.signal()
+                }
+            })
+        }
+        connection.start(queue: queue)
+        _ = done.wait(timeout: .now() + 8)
+        connection.cancel()
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 200"), "응답 없음: \(response)")
+    }
+
     func testUnauthenticatedSlowBodiesAreRejectedAtHeaders() throws {
         let server = try guarded()
         defer { server.stop() }

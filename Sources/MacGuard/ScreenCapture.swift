@@ -29,18 +29,16 @@ enum ScreenGrabber {
     }
 
     /// 찍어서 JPEG로 돌려준다. timeout 안에 못 찍으면 failed이고, 그 뒤에 온 콜백은 찍기·인코딩을 시작하지 않는다.
+    /// isStillAllowed는 찍기 시작 직전에 부른다(경계·잠금 상태 재확인). false면 찍지 않는다.
     /// 메인 스레드에서 부르지 않는다(완료 처리가 어느 큐로 올지 몰라 막힐 수 있음).
-    static func capture(_ request: ScreenRequest, timeout: TimeInterval) -> Outcome {
+    static func capture(_ request: ScreenRequest, timeout: TimeInterval, isStillAllowed: @escaping () -> Bool) -> Outcome {
         guard let id = slot.begin() else { return .busy }
         let job = CaptureJob(timeout: timeout)
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, _ in
-            guard !job.isClosed else {
-                slot.end(id)
-                return
-            }
             // 거절 조건을 확인한 주 화면만 찍는다. 목록에 없으면 다른 화면으로 넘어가지 않는다.
             let mainID = CGMainDisplayID()
-            guard let display = content?.displays.first(where: { $0.displayID == mainID }),
+            guard !job.isClosed,
+                  let display = content?.displays.first(where: { $0.displayID == mainID }),
                   let plan = ScreenPlan(request: request, displayWidth: Double(display.width), displayHeight: Double(display.height)) else {
                 job.finish(nil)
                 slot.end(id)
@@ -53,6 +51,12 @@ enum ScreenGrabber {
             configuration.captureResolution = .best
             configuration.showsCursor = true
             let filter = SCContentFilter(display: display, excludingWindows: [])
+            // 준비하는 사이 시간이 지났거나 경계·잠금 상태가 바뀌었으면 찍기를 시작하지 않는다.
+            guard !job.isClosed, isStillAllowed(), !job.isClosed else {
+                job.finish(nil)
+                slot.end(id)
+                return
+            }
             SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration) { image, _ in
                 defer { slot.end(id) }
                 guard let image, !job.isClosed else {

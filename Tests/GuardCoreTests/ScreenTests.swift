@@ -75,6 +75,14 @@ final class ScreenTests: XCTestCase {
         XCTAssertTrue(job.isClosed)
     }
 
+    /// 재검토 R2: 기다리는 쪽이 깨어나기 전이라도 시간이 지난 뒤 온 값은 버린다.
+    func testCaptureJobDropsValueFinishedAfterDeadline() {
+        let job = CaptureJob(timeout: 0.01)
+        Thread.sleep(forTimeInterval: 0.03)
+        job.finish(Data([1, 2, 3]))
+        XCTAssertNil(job.wait())
+    }
+
     /// 검토 F1: 시스템이 끝내지 않은 찍기가 있으면 새 찍기를 쌓지 않는다.
     func testCaptureSlotAllowsOneUnfinishedCapture() throws {
         let slot = CaptureSlot()

@@ -147,7 +147,8 @@ public final class CaptureJob: @unchecked Sendable {
         defer { lock.unlock() }
         guard !closed else { return }
         closed = true
-        self.value = value
+        // 시간이 지난 뒤 온 값은 기다리는 쪽이 아직 깨어나지 않았어도 받지 않는다.
+        if DispatchTime.now() < deadline { self.value = value }
         done.signal()
     }
 

@@ -127,31 +127,32 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     /// 상태 확인은 메인에서 하고, 찍기는 메인을 벗어나 HTTP 큐에서 기다린다(최대 1.5초, 연결 시간 제한 3초 안).
-    /// 찍은 뒤 메인에서 다시 확인해, 그사이 경계가 꺼지거나 다시 켜졌거나 잠겼으면 그림을 버린다.
+    /// 찍기 직전과 직후에 메인에서 다시 확인해, 그사이 경계가 꺼지거나 다시 켜졌거나 잠겼으면 찍지 않거나 그림을 버린다.
     func screenshot(_ request: ScreenRequest) -> ScreenShotResult {
         let before = onMain { screenGuardSnapshot() }
         if let refusal = before.refusal {
             log.write("screen-refused", "code=\(refusal.rawValue)")
             return .refused(refusal)
         }
-        let now = Date()
-        guard now.timeIntervalSince(lastScreenshotAt) >= 1 else { return .refused(.tooSoon) }
-        lastScreenshotAt = now
-        switch ScreenGrabber.capture(request, timeout: 1.5) {
-        case .busy:
+        guard Date().timeIntervalSince(lastScreenshotAt) >= 1 else { return .refused(.tooSoon) }
+        // 1초 간격은 앞 찍기가 끝난 때부터 센다(화면 목록 조회가 느려도 두 장이 붙어 찍히지 않게).
+        defer { lastScreenshotAt = Date() }
+        let outcome = ScreenGrabber.capture(request, timeout: 1.5) { [self] in
+            onMain { ScreenGuardSnapshot.discardReason(before: before, after: screenGuardSnapshot()) == nil }
+        }
+        if case .busy = outcome {
             log.write("screen-busy")
             return .refused(.tooSoon)
-        case .failed:
+        }
+        if let reason = ScreenGuardSnapshot.discardReason(before: before, after: onMain { screenGuardSnapshot() }) {
+            log.write("screen-discarded", "code=\(reason.rawValue)")
+            return .refused(reason)
+        }
+        guard case .jpeg(let jpeg) = outcome else {
             log.write("screen-refused", "code=\(ScreenRefusal.captureFailed.rawValue)")
             return .refused(.captureFailed)
-        case .jpeg(let jpeg):
-            let after = onMain { screenGuardSnapshot() }
-            if let reason = ScreenGuardSnapshot.discardReason(before: before, after: after) {
-                log.write("screen-discarded", "code=\(reason.rawValue)")
-                return .refused(reason)
-            }
-            return .jpeg(jpeg)
         }
+        return .jpeg(jpeg)
     }
 
     private func screenGuardSnapshot() -> ScreenGuardSnapshot {

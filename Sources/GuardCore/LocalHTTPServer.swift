@@ -16,6 +16,8 @@ public final class LocalHTTPServer {
         let connection: NWConnection
         let startedAt = Date()
         var headComplete = false
+        /// 응답을 보내기 시작함. 처리가 늦게 끝났어도 시간 제한으로 끊지 않고 보내기를 마친 뒤 닫는다.
+        var responding = false
 
         init(_ connection: NWConnection) {
             self.connection = connection
@@ -109,7 +111,11 @@ public final class LocalHTTPServer {
             }
         }
         connection.start(queue: queue)
-        queue.asyncAfter(deadline: .now() + timeout) { [weak self] in self?.close(slot) }
+        queue.asyncAfter(deadline: .now() + timeout) { [weak self] in
+            // 처리가 이 큐를 오래 쓰면 이 시간 제한이 처리 뒤로 밀린다. 그때 이미 보내는 응답은 끊지 않는다.
+            guard !slot.responding else { return }
+            self?.close(slot)
+        }
         receive(slot, buffer: Data())
     }
 
@@ -162,8 +168,11 @@ public final class LocalHTTPServer {
     }
 
     private func respond(_ slot: Slot, _ response: HTTPResponse) {
+        slot.responding = true
         slot.connection.send(content: response.serialized(), completion: .contentProcessed { [weak self] _ in
             if let self { self.close(slot) } else { slot.connection.cancel() }
         })
+        // 받는 쪽이 읽지 않아 보내기가 끝나지 않더라도 자리를 timeout보다 오래 잡지 않는다.
+        queue.asyncAfter(deadline: .now() + timeout) { [weak self] in self?.close(slot) }
     }
 }
