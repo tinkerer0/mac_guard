@@ -52,6 +52,61 @@ final class ScreenTests: XCTestCase {
         XCTAssertEqual(decoded.height, 30)
     }
 
+    /// 검토 F1: 시간이 지난 요청에 늦게 온 결과는 버리고, 콜백은 닫힌 요청을 보고 찍기를 시작하지 않는다.
+    func testCaptureJobKeepsResultThatArrivesInTime() {
+        let job = CaptureJob(timeout: 1)
+        DispatchQueue.global().async { job.finish(Data([1])) }
+        XCTAssertEqual(job.wait(), Data([1]))
+        XCTAssertTrue(job.isClosed)
+    }
+
+    func testCaptureJobDropsLateResult() {
+        let job = CaptureJob(timeout: 0.05)
+        XCTAssertNil(job.wait())
+        XCTAssertTrue(job.isClosed)
+        job.finish(Data([1, 2, 3]))
+        XCTAssertNil(job.wait())
+    }
+
+    func testCaptureJobClosesAtDeadlineBeforeAnyWait() {
+        let job = CaptureJob(timeout: 0.01)
+        XCTAssertFalse(job.isClosed)
+        Thread.sleep(forTimeInterval: 0.03)
+        XCTAssertTrue(job.isClosed)
+    }
+
+    /// 검토 F1: 시스템이 끝내지 않은 찍기가 있으면 새 찍기를 쌓지 않는다.
+    func testCaptureSlotAllowsOneUnfinishedCapture() throws {
+        let slot = CaptureSlot()
+        let start = Date()
+        let first = try XCTUnwrap(slot.begin(at: start))
+        XCTAssertNil(slot.begin(at: start.addingTimeInterval(5)))
+        slot.end(UUID())
+        XCTAssertNil(slot.begin(at: start.addingTimeInterval(6)))
+        slot.end(first)
+        XCTAssertNotNil(slot.begin(at: start.addingTimeInterval(7)))
+    }
+
+    func testCaptureSlotForgetsLostCapture() {
+        let slot = CaptureSlot()
+        let start = Date()
+        XCTAssertNotNil(slot.begin(at: start))
+        XCTAssertNil(slot.begin(at: start.addingTimeInterval(CaptureSlot.staleAfter - 1)))
+        XCTAssertNotNil(slot.begin(at: start.addingTimeInterval(CaptureSlot.staleAfter)))
+    }
+
+    /// 검토 F2: 찍는 사이 경계가 꺼지거나 다시 켜졌거나 잠기면 그림을 버린다.
+    func testPictureIsDroppedWhenGuardChangedWhileCapturing() {
+        let armedAt = Date()
+        let before = ScreenGuardSnapshot(refusal: nil, armedAt: armedAt)
+        XCTAssertNil(ScreenGuardSnapshot.discardReason(before: before, after: before))
+        XCTAssertEqual(ScreenGuardSnapshot.discardReason(before: before, after: ScreenGuardSnapshot(refusal: .disarmed, armedAt: nil)), .disarmed)
+        XCTAssertEqual(ScreenGuardSnapshot.discardReason(before: before, after: ScreenGuardSnapshot(refusal: .locked, armedAt: armedAt)), .locked)
+        XCTAssertEqual(ScreenGuardSnapshot.discardReason(before: before, after: ScreenGuardSnapshot(refusal: .displayAsleep, armedAt: armedAt)), .displayAsleep)
+        let rearmed = ScreenGuardSnapshot(refusal: nil, armedAt: armedAt.addingTimeInterval(1))
+        XCTAssertEqual(ScreenGuardSnapshot.discardReason(before: before, after: rearmed), .disarmed)
+    }
+
     func testRefusalCodesAreFixed() {
         XCTAssertEqual(ScreenRefusal.allCases.map(\.rawValue),
                        ["disabled", "disarmed", "locked", "display-asleep", "permission", "too-soon", "capture-failed"])

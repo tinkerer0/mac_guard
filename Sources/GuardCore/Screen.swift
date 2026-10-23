@@ -105,6 +105,88 @@ public enum ScreenShotResult: Equatable, Sendable {
     case refused(ScreenRefusal)
 }
 
+/// 찍기 직전과 직후의 허용 상태. 찍는 사이 경계가 꺼지거나 다시 켜졌거나 거절 사유가 생기면 그림을 버린다.
+public struct ScreenGuardSnapshot: Equatable, Sendable {
+    public var refusal: ScreenRefusal?
+    /// 경계를 켠 시각. 껐다가 다시 켜면 달라진다.
+    public var armedAt: Date?
+
+    public init(refusal: ScreenRefusal?, armedAt: Date?) {
+        self.refusal = refusal
+        self.armedAt = armedAt
+    }
+
+    /// 그림을 내보내도 되면 nil, 아니면 버리는 이유.
+    public static func discardReason(before: ScreenGuardSnapshot, after: ScreenGuardSnapshot) -> ScreenRefusal? {
+        if let refusal = before.refusal ?? after.refusal { return refusal }
+        return after.armedAt == before.armedAt ? nil : .disarmed
+    }
+}
+
+/// 찍기 하나의 결과를 기다린다. 기다리는 시간이 지나면 닫혀서 늦게 온 결과는 버린다.
+/// 시스템 콜백은 isClosed를 보고 닫힌 요청의 찍기·인코딩을 시작하지 않는다.
+public final class CaptureJob: @unchecked Sendable {
+    private let lock = NSLock()
+    private let done = DispatchSemaphore(value: 0)
+    private let deadline: DispatchTime
+    private var value: Data?
+    private var closed = false
+
+    public init(timeout: TimeInterval) {
+        deadline = .now() + timeout
+    }
+
+    public var isClosed: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return closed || DispatchTime.now() >= deadline
+    }
+
+    public func finish(_ value: Data?) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !closed else { return }
+        closed = true
+        self.value = value
+        done.signal()
+    }
+
+    /// 결과가 오거나 시간이 다 될 때까지 기다린다. 돌아온 뒤에는 닫힌다.
+    public func wait() -> Data? {
+        _ = done.wait(timeout: deadline)
+        lock.lock()
+        defer { lock.unlock() }
+        closed = true
+        return value
+    }
+}
+
+/// 시스템이 아직 끝내지 않은 찍기가 있으면 새 찍기를 시작하지 않는다(늦은 콜백이 쌓이지 않게).
+/// 끝났다는 소식 없이 staleAfter가 지나면 잃어버린 것으로 보고 새 찍기를 허락한다.
+public final class CaptureSlot: @unchecked Sendable {
+    public static let staleAfter: TimeInterval = 30
+
+    private let lock = NSLock()
+    private var running: (id: UUID, since: Date)?
+
+    public init() {}
+
+    public func begin(at now: Date = Date()) -> UUID? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let running, now.timeIntervalSince(running.since) < Self.staleAfter { return nil }
+        let id = UUID()
+        running = (id, now)
+        return id
+    }
+
+    public func end(_ id: UUID) {
+        lock.lock()
+        defer { lock.unlock() }
+        if running?.id == id { running = nil }
+    }
+}
+
 public enum JPEGEncoder {
     /// 그림을 메모리 안에서만 JPEG로 바꾼다(파일로 남기지 않음).
     public static func encode(_ image: CGImage, quality: Double = 0.6) -> Data? {

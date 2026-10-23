@@ -79,6 +79,8 @@ struct ScreenView: View {
 
     @MainActor
     private func load(_ region: CGRect?) async {
+        // 앞 요청이 끝나기 전에 또 누르면 무시한다(늦게 온 그림이 새 그림을 덮지 않게).
+        guard !loading else { return }
         loading = true
         defer { loading = false }
         do {
