@@ -10,8 +10,8 @@
 | --- | --- | --- |
 | 맥 앱 | `Sources/MacGuard` | 메뉴 막대 앱. 실제 입력 감지, 잠금, 127.0.0.1 HTTP API, 워치로 푸시 |
 | 핵심 로직 | `Sources/GuardCore` | 경계 판단(`GuardEngine`), HTTP 파서·API, APNs JWT·요청, 설정. 단위 테스트 대상 |
-| 워치 앱 | `watch/App` (xcodegen) | 알람 받기(직접 푸시), 알람 끄기, 경계 켜기/끄기, 지금 잠그기 |
-| 아이폰 앱 | `watch/Phone` | 워치 앱을 아이폰을 거쳐 설치하는 그릇, 상태 보기·알람 끄기, 알림 한 번(반복 알람은 워치만) |
+| 워치 앱 | `watch/App` (xcodegen) | 알람 받기(직접 푸시), 알람 끄기, 경계 켜기/끄기, 지금 잠그기, 화면 보기 |
+| 아이폰 앱 | `watch/Phone` | 워치 앱을 아이폰을 거쳐 설치하는 그릇, 상태 보기·알람 끄기·화면 보기, 알림 한 번(반복 알람은 워치만) |
 
 흐름: 경계 켜기(워치·아이폰·메뉴, 맥은 잠그지 않아 AI 작업이 계속 돎) → (5초 유예 뒤) 사람 입력이나 깨어남 → 바로 잠금 → 10초 안에 본인이 잠금을 풀지 않으면
 워치 알람 → 15초마다 반복 → 워치의 "알람 끄기"(5분간 새 알람 없음)·맥 잠금 해제·10분 경과 중 하나로 멈춤.
@@ -19,7 +19,17 @@
 "지금 잠그기"는 누르는 즉시 잠근다. 경계를 켜는 순간 잠그고 싶으면 설정 `lockOnArm: true`.
 아이폰은 알람의 첫 알림과 정보 알림(잠금 해제·알람 시간 초과)을 한 번씩만 받는다(`DeviceRole.receives`). 두 기기에 같은 알림 ID(`apns-collapse-id`)로 보낸다.
 Apple 문서는 이렇게 두 기기에 보내면 "가장 알맞은 한 곳에만" 보여 준다고 하므로, 아이폰을 쓰고 있을 때는 첫 알림이 아이폰에만 뜨고 워치는 다음 반복부터 울릴 수 있다(실기 미확인).
-"알람 끄기"와 워치·아이폰 등록은 기기에서 맥으로 가야 해서 외부 연결(Funnel)이 켜져 있어야 한다.
+"알람 끄기"·화면 보기와 워치·아이폰 등록은 기기에서 맥으로 가야 해서 외부 연결(Funnel)이 켜져 있어야 한다.
+
+## 화면 보기
+
+설정 `screenView: true`이면 워치·아이폰에서 맥 화면을 한 장씩 받아 본다. 자리를 비운 동안 AI 작업을 확인하는 용도라
+경계 중이면서 맥이 풀려 있고 화면이 켜져 있을 때만 찍는다(잠기면 잠금 화면만 보이므로 찍지 않는다). 잠김 여부를 못 읽으면 잠긴 것으로 본다.
+처음에는 전체를 받고, 그림을 누르면 그 자리를 3배로 확대해 다시 받는다. 저절로 다시 찍지 않는다.
+
+- 맥 앱에 화면 기록 권한이 필요하다(시스템 설정 → 개인정보 보호 및 보안 → 화면 및 시스템 오디오 녹음). 꺼져 있으면 메뉴에 "화면 기록 허용하기…"가 뜬다.
+- 1초에 한 장, 2초 안에 못 찍으면 포기한다. 그림은 메모리에서만 만들고 파일로 남기지 않는다. 화면을 깨우거나 유휴 시간을 바꾸지 않는다.
+- 찍을 때마다 기록에 `api POST /v1/screen 200 client=…` 한 줄이 남고, 거절하면 `screen-refused code=…`가 남는다.
 
 ## 감지 방식
 
@@ -53,6 +63,7 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
   "alarmRepeatSeconds": 15,
   "alarmMaxSeconds": 600,
   "alarmSnoozeSeconds": 300,
+  "screenView": false,
   "apns": {
     "teamID": "Y35NBHS9WU",
     "keyID": "<APNs 키 ID>",
@@ -67,7 +78,8 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 
 ## API (127.0.0.1만, `Authorization: Bearer <토큰>`)
 
-`GET /v1/status`, `POST /v1/arm {"lockOnTouch"?}`, `POST /v1/disarm`, `POST /v1/settings {"lockOnTouch"}`, `POST /v1/lock`, `POST /v1/ack`, `POST /v1/watch-token {"token","environment"?}`, `POST /v1/phone-token {"token","environment"?}`.
+`GET /v1/status`, `POST /v1/arm {"lockOnTouch"?}`, `POST /v1/disarm`, `POST /v1/settings {"lockOnTouch"}`, `POST /v1/lock`, `POST /v1/ack`, `POST /v1/watch-token {"token","environment"?}`, `POST /v1/phone-token {"token","environment"?}`,
+`POST /v1/screen {"width"?, "region"?: {"x","y","width","height"}}`(성공은 `image/jpeg`, 거절은 403·409·429·503과 코드 `disabled`·`disarmed`·`locked`·`display-asleep`·`permission`·`too-soon`·`capture-failed`).
 토큰이 틀리면 경로가 있는지도 알려 주지 않고 401을 준다. 바깥에서 오는 요청은 중계(예: tailscale funnel)가 이 주소로 넘겨준다.
 
 ## 시스템 설정과 부하
@@ -79,6 +91,7 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 - 2026-10-22 측정(MacBook Air, macOS 26.6.2): 경계 꺼짐 상태 CPU 0.00%(가짜 입력 1628건을 넣어도 0.00%),
   경계 중 입력이 쏟아질 때 1.9%, 메모리 약 43MB. 잠금 시험 포함 42초 동안 누적 CPU 0.12초.
 - 기록은 1MB를 넘으면 `.1`로 넘기고, 토큰이 틀린 요청은 1분에 한 줄만 남긴다. 동시 연결은 16개까지.
+- 화면 보기는 요청이 올 때만 찍는다. 2026-10-23 측정: 전체 1500px 한 장 0.12초·359KB, 워치 크기 450px를 공개 주소로 받기 1.35초·45KB.
 
 ## 상태 (2026-10-22)
 
@@ -95,6 +108,9 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
   임시 비밀 파일 ignore 누락, 폴더 링크 처리)을 재현한 뒤 고쳤다.
 - 외부 공개(Tailscale Funnel, `https://<맥>.ts.net` → 127.0.0.1:8787): 공개 경로에서 정상 토큰 200, 틀린·없는 토큰 401.
   Tailscale 프록시 경유 느린 무토큰 연결 40개를 열어도 앱 쪽 연결은 0개, 정상 요청 200.
+- 화면 보기(10-23, 설치한 앱): 설정 꺼짐 403 `disabled`, 경계 꺼짐 409 `disarmed`, 권한 없음 403 `permission`, 바로 다시 요청 429 `too-soon`.
+  권한을 준 뒤 경계 중 전체 1500×971·확대 800×518 JPEG를 받았고, 확대 그림이 전체 그림의 왼쪽 위 1/3과 맞았다
+  (평균 차이 4.3, 왼쪽 아래 1/3과는 17.5). 시험 뒤 경계 꺼짐·`lockOnTouch` 유지 확인, 시험 그림은 지웠다. 단위 테스트 54개 통과.
 
 남은 위험·미확인:
 - 잠긴 화면에서의 입력 감지(유휴 시간 보조) — 시험 때 바로 풀어 확인 못 함.
@@ -103,6 +119,9 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
   `tailscale funnel reset`을 실행했는지는 확인하지 못했다. 원인은 확정하지 못했다.
 - 공개 주소에 인터넷 스캐너 요청(`/.git/config`, `/wp-json/…`, 많을 때 1분에 27건)이 들어온다. 모두 401로 막혔다.
 - 연결을 계속 퍼붓는 공격은 완전히 막지 못한다. 워치 빌드와 DerivedData에는 토큰이 들어간다(개인 빌드).
+- 화면 보기는 화면 픽셀이 공개 주소로 나간다. 막는 것은 접속 토큰 하나뿐이고, 경계 중에만 찍어 노출되는 시간을 줄였다.
+  워치·아이폰에서의 실제 사용, 잠김·화면 꺼짐 때의 거절은 실기로 확인하지 못했다. macOS가 화면 기록 허용을 주기적으로 다시 물을 수 있다
+  (2024년 Sequoia 보도 기준 월 1회, 이 맥의 macOS 26에서는 미확인).
 - APNs 키 발급과 실제 푸시, 알람 반복 시 워치가 매번 울리는지(collapse-id), "알람 끄기" 버튼 동작.
 - 아이폰·워치에 같은 알림을 보낼 때 실제로 어디에 뜨는지, 워치가 아이폰 사본을 기다리느라 늦게 울리는지(포럼 보고 약 13초, Apple 문서 아님).
 
