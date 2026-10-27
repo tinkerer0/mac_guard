@@ -23,8 +23,9 @@ struct PhoneView: View {
                     VStack(spacing: 12) {
                         primaryButton
                         HStack(spacing: 12) {
+                            // 경계 없이 볼 수 있는지는 맥 설정(screenViewWhenDisarmed)에 달려 있어, 막히면 화면 보기 안에서 이유를 보여 준다.
                             tile("View Screen", systemImage: "display", enabled: canViewScreen,
-                                 hint: status.map { !$0.armed ? "Only while armed" : ($0.screenLocked ? "Mac locked" : nil) } ?? nil) {
+                                 hint: (status?.screenLocked ?? false) ? "Mac locked" : nil) {
                                 showingScreen = true
                             }
                             tile("Lock Now", systemImage: "lock.fill", enabled: status.map { !$0.screenLocked } ?? false,
@@ -143,7 +144,7 @@ struct PhoneView: View {
 
     private var canViewScreen: Bool {
         guard let status else { return false }
-        return status.armed && !status.screenLocked
+        return !status.screenLocked
     }
 
     private func bigButton(_ title: String, systemImage: String, tint: Color, action: @escaping () -> Void) -> some View {

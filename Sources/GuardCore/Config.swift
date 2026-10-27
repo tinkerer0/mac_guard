@@ -48,6 +48,9 @@ public struct GuardConfig: Codable, Equatable, Sendable {
     public var dryRunLock = false
     /// 워치·아이폰에서 맥 화면 보기. 켜도 경계 중이면서 잠기지 않고 화면이 켜져 있을 때만 찍는다.
     public var screenView = false
+    /// 경계를 켜지 않아도 화면 보기를 허용한다(Jinwoo 2026-10-27). 잠김·화면 꺼짐·권한 확인은 그대로.
+    /// 켜면 접속 토큰만 있으면 책상 앞에 있을 때의 화면도 보인다.
+    public var screenViewWhenDisarmed = false
     public var apns: APNsConfig?
 
     public init() {}
@@ -68,6 +71,7 @@ public struct GuardConfig: Codable, Equatable, Sendable {
         alarmSnoozeSeconds = try container.decodeIfPresent(Double.self, forKey: .alarmSnoozeSeconds) ?? defaults.alarmSnoozeSeconds
         dryRunLock = try container.decodeIfPresent(Bool.self, forKey: .dryRunLock) ?? defaults.dryRunLock
         screenView = try container.decodeIfPresent(Bool.self, forKey: .screenView) ?? defaults.screenView
+        screenViewWhenDisarmed = try container.decodeIfPresent(Bool.self, forKey: .screenViewWhenDisarmed) ?? defaults.screenViewWhenDisarmed
         apns = try container.decodeIfPresent(APNsConfig.self, forKey: .apns)
     }
 

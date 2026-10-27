@@ -49,7 +49,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
             log.write("screen-capture-missing")
             ScreenGrabber.requestPermission()
         }
-        log.write("started", "port=\(server?.port ?? 0) input=\(inputMonitoring) push=\(sender != nil) watch=\(devices.watch != nil) phone=\(devices.phone != nil) screen=\(config.screenView)")
+        log.write("started", "port=\(server?.port ?? 0) input=\(inputMonitoring) push=\(sender != nil) watch=\(devices.watch != nil) phone=\(devices.phone != nil) screen=\(config.screenView) screenDisarmed=\(config.screenViewWhenDisarmed)")
         refreshIcon()
     }
 
@@ -163,7 +163,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     /// 잠김 여부를 못 읽으면 잠긴 것으로 본다.
     private func screenRefusal() -> ScreenRefusal? {
         if !config.screenView { return .disabled }
-        if !engine.isArmed { return .disarmed }
+        if !engine.isArmed, !config.screenViewWhenDisarmed { return .disarmed }
         if ScreenLocker.lockState() ?? true { return .locked }
         if ScreenGrabber.isDisplayAsleep() { return .displayAsleep }
         if !ScreenGrabber.hasPermission() { return .permission }
@@ -435,7 +435,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         }
         if config.screenView {
             if ScreenGrabber.hasPermission() {
-                menu.addItem(info("Screen view: only while armed"))
+                menu.addItem(info(config.screenViewWhenDisarmed ? "Screen view: on" : "Screen view: only while armed"))
             } else {
                 menu.addItem(action("Allow Screen Recording…", #selector(openScreenCaptureSettings)))
             }

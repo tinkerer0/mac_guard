@@ -26,6 +26,8 @@ final class ConfigTests: XCTestCase {
     func testScreenViewIsOffUnlessSet() throws {
         XCTAssertFalse(GuardConfig().screenView)
         XCTAssertTrue(try JSONDecoder().decode(GuardConfig.self, from: Data(#"{"screenView": true}"#.utf8)).screenView)
+        XCTAssertFalse(GuardConfig().screenViewWhenDisarmed)
+        XCTAssertTrue(try JSONDecoder().decode(GuardConfig.self, from: Data(#"{"screenViewWhenDisarmed": true}"#.utf8)).screenViewWhenDisarmed)
     }
 
     func testMissingFileGivesDefaults() throws {
