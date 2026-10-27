@@ -1,6 +1,11 @@
 import SwiftUI
 
 /// 아이폰·워치·위젯이 같은 말과 색으로 상태를 보여 주도록 한곳에 둔다.
+extension Locale {
+    /// 화면 글자를 영어로 쓰므로 시각도 기기 언어와 상관없이 영어 형식(10:09 AM)으로 보인다.
+    static let guardDisplay = Locale(identifier: "en_US")
+}
+
 enum GuardWidgetKind {
     static let status = "MacGuardStatus"
 }
@@ -26,10 +31,10 @@ enum GuardMood {
 
     var title: String {
         switch self {
-        case .alarm: return "알람"
-        case .armed: return "경계 중"
-        case .disarmed: return "경계 꺼짐"
-        case .unreachable: return "연결 안 됨"
+        case .alarm: return "Alarm"
+        case .armed: return "Armed"
+        case .disarmed: return "Disarmed"
+        case .unreachable: return "Offline"
         }
     }
 
@@ -56,11 +61,11 @@ extension GuardStatusDTO {
     var summary: String {
         var parts: [String] = []
         if armed, let from = watchingFrom, from > Date() {
-            parts.append("곧 감시 시작")
+            parts.append("Starting soon")
         }
-        parts.append(screenLocked ? "맥 잠김" : "맥 풀림")
+        parts.append(screenLocked ? "Mac locked" : "Mac unlocked")
         if let last = lastInputAt {
-            parts.append("\(last.formatted(date: .omitted, time: .shortened)) 감지")
+            parts.append("Touched \(last.formatted(.dateTime.hour().minute().locale(.guardDisplay)))")
         }
         return parts.joined(separator: " · ")
     }
@@ -68,10 +73,10 @@ extension GuardStatusDTO {
     /// 고쳐야 할 것만. 다 괜찮으면 빈 목록.
     var problems: [String] {
         var list: [String] = []
-        if !inputMonitoring { list.append("맥에서 입력 모니터링을 허용해야 해요") }
-        if !pushConfigured { list.append("알림 키(APNs)가 없어 알람이 기기로 가지 않아요") }
-        if !watchRegistered { list.append("워치가 아직 등록되지 않았어요") }
-        if !(phoneRegistered ?? false) { list.append("아이폰이 아직 등록되지 않았어요") }
+        if !inputMonitoring { list.append("Allow Input Monitoring on the Mac") }
+        if !pushConfigured { list.append("No APNs key: alarms can't reach your devices") }
+        if !watchRegistered { list.append("Apple Watch isn't registered yet") }
+        if !(phoneRegistered ?? false) { list.append("iPhone isn't registered yet") }
         return list
     }
 }

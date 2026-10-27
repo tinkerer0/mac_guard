@@ -35,7 +35,7 @@ final class GuardModel: ObservableObject {
                 status = try await client.disarm()
             }
             reachable = true
-            message = on ? "경계를 켰어요" : "경계를 껐어요"
+            message = on ? "Armed" : "Disarmed"
             WKInterfaceDevice.current().play(.success)
         } catch {
             fail(error)
@@ -59,7 +59,7 @@ final class GuardModel: ObservableObject {
         do {
             let result = try await client.lock()
             reachable = true
-            message = result.locked ? "맥북을 잠갔어요" : "잠그지 못했어요: \(result.detail ?? result.method)"
+            message = result.locked ? "MacBook locked" : "Couldn't lock: \(result.detail ?? result.method)"
             WKInterfaceDevice.current().play(result.locked ? .success : .failure)
             status = try? await client.status()
         } catch {
@@ -73,7 +73,7 @@ final class GuardModel: ObservableObject {
         do {
             status = try await client.acknowledgeAlarm()
             reachable = true
-            message = "알람을 껐어요"
+            message = "Alarm stopped"
             WKInterfaceDevice.current().play(.success)
         } catch {
             fail(error)
@@ -86,7 +86,7 @@ final class GuardModel: ObservableObject {
             pendingToken = nil
         } catch {
             pendingToken = hex
-            message = "워치 등록 실패: \(describe(error))"
+            message = "Watch registration failed: \(describe(error))"
         }
     }
 
@@ -97,6 +97,6 @@ final class GuardModel: ObservableObject {
     }
 
     private func describe(_ error: Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? "맥에 연결하지 못했어요"
+        (error as? LocalizedError)?.errorDescription ?? "Can't reach the Mac"
     }
 }

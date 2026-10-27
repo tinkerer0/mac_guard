@@ -17,7 +17,7 @@ struct ContentView: View {
                     Button {
                         Task { await model.acknowledgeAlarm() }
                     } label: {
-                        Label("알람 끄기", systemImage: "bell.slash.fill")
+                        Label("Stop Alarm", systemImage: "bell.slash.fill")
                             .font(.headline)
                     }
                     .tint(.red)
@@ -27,7 +27,7 @@ struct ContentView: View {
                     Button {
                         Task { await model.setArmed(!status.armed) }
                     } label: {
-                        Label(status.armed ? "경계 끄기" : "경계 켜기",
+                        Label(status.armed ? "Disarm" : "Arm",
                               systemImage: status.armed ? "shield.slash" : "lock.shield")
                     }
                     .tint(status.armed ? .gray : .green)
@@ -37,7 +37,7 @@ struct ContentView: View {
                     Button(role: .destructive) {
                         Task { await model.lockNow() }
                     } label: {
-                        Label("지금 잠그기", systemImage: "lock.fill")
+                        Label("Lock Now", systemImage: "lock.fill")
                     }
                     .tint(.red)
                     .disabled(model.busy)
@@ -47,9 +47,9 @@ struct ContentView: View {
                     // 워치는 배터리를 아끼려고 3초에 한 장만 받는다.
                     NavigationLink {
                         ScreenView(client: model.client, pixelWidth: 450, minInterval: 3)
-                            .navigationTitle("맥 화면")
+                            .navigationTitle("Mac Screen")
                     } label: {
-                        Label("화면 보기", systemImage: "display")
+                        Label("View Screen", systemImage: "display")
                     }
                 }
 
@@ -73,9 +73,9 @@ struct ContentView: View {
         if model.reachable == false {
             // 외부 연결(Funnel)을 꺼 두고 알림만 받는 사용 방식에서는 이 화면이 기본이다.
             VStack(spacing: 4) {
-                Label("알림 받는 중", systemImage: "bell.badge")
+                Label("Receiving alerts", systemImage: "bell.badge")
                     .font(.headline)
-                Text("경계는 맥 메뉴 막대에서 켜고 끕니다")
+                Text("Arm and disarm from the Mac menu bar")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -93,7 +93,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 if !status.inputMonitoring {
-                    Text("맥에서 입력 모니터링 허용 필요")
+                    Text("Allow Input Monitoring on the Mac")
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 }

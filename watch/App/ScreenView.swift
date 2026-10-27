@@ -53,7 +53,7 @@ struct ScreenView: View {
                                     }
                             }
                         }
-                        .accessibilityLabel(frame.region == nil ? "맥 화면 전체" : "맥 화면 확대")
+                        .accessibilityLabel(frame.region == nil ? "Mac screen" : "Mac screen, zoomed in")
                 } else if stopped == nil {
                     ProgressView()
                 }
@@ -78,9 +78,9 @@ struct ScreenView: View {
             badge
             Spacer(minLength: 0)
             if stopped != nil {
-                Button("다시 시작") { restarts += 1 }
+                Button("Resume") { restarts += 1 }
             } else if target != nil {
-                Button("전체") { target = nil }
+                Button("Full Screen") { target = nil }
             }
         }
         .font(.caption)
@@ -95,10 +95,10 @@ struct ScreenView: View {
                     Circle()
                         .fill(age < 5 ? Color.red : Color.orange)
                         .frame(width: 6, height: 6)
-                    Text(age < 5 ? "실시간" : "\(Int(age))초 전")
+                    Text(age < 5 ? "Live" : "\(Int(age))s ago")
                         .foregroundStyle(age < 5 ? Color.primary : Color.orange)
                 } else if stopped != nil {
-                    Text("멈춤")
+                    Text("Paused")
                         .foregroundStyle(.secondary)
                 }
                 if let trouble, stopped == nil {
@@ -131,14 +131,14 @@ struct ScreenView: View {
                     pause = 0.3
                 case GuardClientError.screen("capture-failed"):
                     failures += 1
-                    trouble = "찍지 못했어요"
+                    trouble = "Capture failed"
                 case GuardClientError.screen, GuardClientError.http(401):
                     // 경계 꺼짐·잠김·화면 꺼짐·권한·토큰: 다시 불러도 같은 답이라 멈춘다.
                     stopped = describe(error)
                     return
                 default:
                     failures += 1
-                    trouble = "연결이 느려요"
+                    trouble = "Slow connection"
                 }
             }
             // 연결이 계속 안 되면 2·4·8초로 늘리되 10초를 넘기지 않는다.
@@ -162,6 +162,6 @@ struct ScreenView: View {
     }
 
     private func describe(_ error: Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? "맥에 연결하지 못했어요"
+        (error as? LocalizedError)?.errorDescription ?? "Can't reach the Mac"
     }
 }

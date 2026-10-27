@@ -31,15 +31,15 @@ enum GuardClientError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .http(401): return "토큰이 맞지 않아요"
-        case .http(let code): return "맥 응답 오류 \(code)"
-        case .screen("disabled"): return "맥에서 화면 보기가 꺼져 있어요"
-        case .screen("disarmed"): return "경계 중일 때만 볼 수 있어요"
-        case .screen("locked"): return "맥이 잠겨 있어요"
-        case .screen("display-asleep"): return "맥 화면이 꺼져 있어요"
-        case .screen("permission"): return "맥에서 화면 기록을 허용해야 해요"
-        case .screen("too-soon"): return "잠시 뒤 다시 눌러 주세요"
-        case .screen: return "화면을 찍지 못했어요"
+        case .http(401): return "Wrong access token"
+        case .http(let code): return "Mac error \(code)"
+        case .screen("disabled"): return "Screen view is off on the Mac"
+        case .screen("disarmed"): return "Only available while armed"
+        case .screen("locked"): return "The Mac is locked"
+        case .screen("display-asleep"): return "The Mac's display is off"
+        case .screen("permission"): return "Allow Screen Recording on the Mac"
+        case .screen("too-soon"): return "Try again in a moment"
+        case .screen: return "Couldn't capture the screen"
         }
     }
 }

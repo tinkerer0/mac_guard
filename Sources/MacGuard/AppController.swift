@@ -102,13 +102,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         let method = onMain { requestLock(reason: "remote") }
         guard method == "sac" else {
             return method == "unavailable"
-                ? LockResult(locked: false, method: method, detail: "잠금 함수를 찾지 못했어요")
+                ? LockResult(locked: false, method: method, detail: "lock function not found")
                 : LockResult(locked: true, method: method)
         }
         // 잠금 화면이 뜨기를 HTTP 큐에서 기다린다. 메인 스레드는 막지 않는다.
         let locked = ScreenLocker.waitUntilLocked(timeout: 1.5)
         log.write("lock-check", "reason=remote locked=\(locked)")
-        return LockResult(locked: locked, method: method, detail: locked ? nil : "잠금 화면이 뜨지 않았어요")
+        return LockResult(locked: locked, method: method, detail: locked ? nil : "lock screen didn't appear")
     }
 
     func registerDevice(_ role: DeviceRole, deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? {
@@ -329,14 +329,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
 
     private func setUpPush() {
         guard let apns = config.apns else {
-            pushProblem = "APNs 설정 없음"
+            pushProblem = "APNs not configured"
             return
         }
         do {
             let key = try APNsSender.loadKey(pemFile: expandPath(apns.keyFile))
             sender = APNsSender(credentials: APNsCredentials(teamID: apns.teamID, keyID: apns.keyID, key: key), topic: apns.topic)
         } catch {
-            pushProblem = "APNs 키를 읽지 못함"
+            pushProblem = "couldn't read APNs key"
             log.write("push-key-failed", String(describing: type(of: error)))
         }
     }
@@ -351,7 +351,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         }
         let message = APNsMessage.make(for: alert)
         let targets = DeviceRole.allCases.filter { $0.receives(alert) }.compactMap { role in devices[role].map { (role, $0) } }
-        if targets.isEmpty { log.write("push-skipped", "등록된 기기 없음") }
+        if targets.isEmpty { log.write("push-skipped", "no registered devices") }
         for (role, device) in targets {
             let topic = role == .watch ? apns.topic : apns.resolvedPhoneTopic
             sender.send(message, to: device.deviceToken, environment: device.environment ?? apns.environment, topic: topic) { [log] result, reason in
@@ -419,35 +419,35 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         let symbol = engine.isAlarmActive ? "bell.and.waves.left.and.right.fill" : (engine.isArmed ? "lock.shield.fill" : "lock.shield")
         statusItem?.button?.image = NSImage(
             systemSymbolName: symbol,
-            accessibilityDescription: engine.isAlarmActive ? "MacGuard: 알람" : (engine.isArmed ? "MacGuard: 경계 중" : "MacGuard: 꺼짐")
+            accessibilityDescription: engine.isAlarmActive ? "MacGuard: Alarm" : (engine.isArmed ? "MacGuard: Armed" : "MacGuard: Disarmed")
         )
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let status = makeStatus()
-        menu.addItem(info(status.alarmActive ? "알람 울리는 중" : (status.armed ? "경계 중" : "경계 꺼짐")))
+        menu.addItem(info(status.alarmActive ? "Alarm ringing" : (status.armed ? "Armed" : "Disarmed")))
         if status.alarmActive || status.alarmPending {
-            menu.addItem(action("알람 끄기", #selector(acknowledgeFromMenu)))
+            menu.addItem(action("Stop Alarm", #selector(acknowledgeFromMenu)))
         }
         if !inputMonitoring {
-            menu.addItem(action("입력 모니터링 허용하기…", #selector(openInputMonitoringSettings)))
+            menu.addItem(action("Allow Input Monitoring…", #selector(openInputMonitoringSettings)))
         }
         if config.screenView {
             if ScreenGrabber.hasPermission() {
-                menu.addItem(info("화면 보기: 경계 중에만"))
+                menu.addItem(info("Screen view: only while armed"))
             } else {
-                menu.addItem(action("화면 기록 허용하기…", #selector(openScreenCaptureSettings)))
+                menu.addItem(action("Allow Screen Recording…", #selector(openScreenCaptureSettings)))
             }
         }
-        if let serverProblem { menu.addItem(info("워치 연결 꺼짐: \(serverProblem)")) }
-        menu.addItem(info("워치 \(devices.watch == nil ? "등록 안 됨" : "등록됨") · 아이폰 \(devices.phone == nil ? "등록 안 됨" : "등록됨")"))
-        if let pushProblem { menu.addItem(info("알림: \(pushProblem)")) }
+        if let serverProblem { menu.addItem(info("Remote access off: \(serverProblem)")) }
+        menu.addItem(info("Watch \(devices.watch == nil ? "not registered" : "registered") · iPhone \(devices.phone == nil ? "not registered" : "registered")"))
+        if let pushProblem { menu.addItem(info("Alerts: \(pushProblem)")) }
         menu.addItem(.separator())
-        menu.addItem(action(status.armed ? "경계 끄기" : "경계 켜기", #selector(toggleArmed)))
-        menu.addItem(action("지금 잠그기", #selector(lockFromMenu)))
+        menu.addItem(action(status.armed ? "Disarm" : "Arm", #selector(toggleArmed)))
+        menu.addItem(action("Lock Now", #selector(lockFromMenu)))
         menu.addItem(.separator())
-        menu.addItem(action("종료", #selector(quit)))
+        menu.addItem(action("Quit MacGuard", #selector(quit)))
     }
 
     private func info(_ title: String) -> NSMenuItem {

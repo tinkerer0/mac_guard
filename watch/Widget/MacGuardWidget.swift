@@ -15,10 +15,11 @@ struct MacGuardStatusWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: GuardWidgetKind.status, provider: GuardProvider()) { entry in
             GuardWidgetView(entry: entry)
+                .environment(\.locale, .guardDisplay)
                 .containerBackground(.background, for: .widget)
         }
         .configurationDisplayName("MacGuard")
-        .description("경계 상태를 보고 바로 켜고 끕니다.")
+        .description("See guard status and arm or disarm.")
         .supportedFamilies([.systemSmall])
     }
 }
@@ -71,7 +72,7 @@ struct GuardWidgetView: View {
             Spacer(minLength: 4)
             Text(mood.title)
                 .font(.headline)
-            Text(entry.status.map { $0.screenLocked ? "맥 잠김" : "맥 풀림" } ?? "앱을 열어 확인")
+            Text(entry.status.map { $0.screenLocked ? "Mac locked" : "Mac unlocked" } ?? "Open the app")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 6)
@@ -84,13 +85,13 @@ struct GuardWidgetView: View {
     @ViewBuilder private func button(for status: GuardStatusDTO) -> some View {
         Group {
             if status.isAlarming {
-                Button(intent: AcknowledgeAlarmIntent()) { label("알람 끄기") }
+                Button(intent: AcknowledgeAlarmIntent()) { label("Stop Alarm") }
                     .tint(.red)
             } else if status.armed {
-                Button(intent: SetGuardIntent(on: false)) { label("끄기") }
+                Button(intent: SetGuardIntent(on: false)) { label("Disarm") }
                     .tint(.gray)
             } else {
-                Button(intent: SetGuardIntent(on: true)) { label("켜기") }
+                Button(intent: SetGuardIntent(on: true)) { label("Arm") }
                     .tint(.green)
             }
         }
@@ -111,10 +112,10 @@ enum GuardIntentClient {
 }
 
 struct SetGuardIntent: AppIntent {
-    static let title: LocalizedStringResource = "MacGuard 경계 켜기·끄기"
+    static let title: LocalizedStringResource = "Arm or Disarm MacGuard"
     static let isDiscoverable = false
 
-    @Parameter(title: "켜기")
+    @Parameter(title: "Arm")
     var on: Bool
 
     init() {}
@@ -131,7 +132,7 @@ struct SetGuardIntent: AppIntent {
 }
 
 struct AcknowledgeAlarmIntent: AppIntent {
-    static let title: LocalizedStringResource = "MacGuard 알람 끄기"
+    static let title: LocalizedStringResource = "Stop MacGuard Alarm"
     static let isDiscoverable = false
 
     func perform() async throws -> some IntentResult {

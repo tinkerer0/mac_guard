@@ -51,22 +51,22 @@ public struct APNsMessage: Equatable, Sendable {
         case .alarm:
             let since = clock(alert.since ?? alert.at, timeZone: timeZone)
             return APNsMessage(
-                title: "맥북을 누가 만지고 있어요",
+                title: "Someone is touching your MacBook",
                 body: alert.screenLocked
-                    ? "\(since)부터 잠긴 맥북에 입력이 있어요. 끄려면 '알람 끄기'."
-                    : "\(since)부터 입력이 있는데 맥북이 잠기지 않았어요. 끄려면 '알람 끄기'.",
+                    ? "Input on your locked MacBook since \(since). Tap Stop Alarm to silence."
+                    : "Input since \(since), but the MacBook didn't lock. Tap Stop Alarm to silence.",
                 category: alarmCategory, collapseID: "mac-guard-alarm", kind: alert.kind
             )
         case .alarmTimedOut:
             return APNsMessage(
-                title: "맥북 알람을 멈췄어요",
-                body: "\(time) 최대 시간이 지나 알람을 멈췄어요. 경계는 켜져 있어요.",
+                title: "MacBook alarm stopped",
+                body: "Stopped at \(time) after the time limit. Guard is still armed.",
                 category: infoCategory, collapseID: "mac-guard-alarm", kind: alert.kind
             )
         case .unlocked:
             return APNsMessage(
-                title: "맥북 잠금이 풀렸어요",
-                body: "\(time) 잠금이 풀려 경계와 알람을 껐어요. 본인이 아니면 확인하세요.",
+                title: "MacBook unlocked",
+                body: "Unlocked at \(time). Guard and alarm are off. Check it if this wasn't you.",
                 // 워치·아이폰이 같은 알림으로 알아보게 사건마다 같은 ID를 둔다.
                 category: infoCategory, collapseID: "mac-guard-unlocked-\(Int(alert.at.timeIntervalSince1970))", kind: alert.kind
             )

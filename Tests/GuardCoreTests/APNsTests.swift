@@ -57,8 +57,8 @@ final class APNsTests: XCTestCase {
         let payload = try JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any]
         let aps = payload?["aps"] as? [String: Any]
         let alert = aps?["alert"] as? [String: String]
-        XCTAssertEqual(alert?["title"], "맥북을 누가 만지고 있어요")
-        XCTAssertEqual(alert?["body"], "16:59:50부터 잠긴 맥북에 입력이 있어요. 끄려면 '알람 끄기'.")
+        XCTAssertEqual(alert?["title"], "Someone is touching your MacBook")
+        XCTAssertEqual(alert?["body"], "Input on your locked MacBook since 16:59:50. Tap Stop Alarm to silence.")
         XCTAssertEqual(aps?["category"] as? String, APNsMessage.alarmCategory)
         XCTAssertEqual(aps?["interruption-level"] as? String, "time-sensitive")
         XCTAssertEqual(payload?["kind"] as? String, "alarm")
@@ -71,7 +71,7 @@ final class APNsTests: XCTestCase {
         }
         XCTAssertEqual(APNsMessage.make(for: GuardAlert(kind: .unlocked, at: t0)).collapseID, "mac-guard-unlocked-1800000000")
         let unlocked = APNsMessage.make(for: GuardAlert(kind: .alarm, at: t0, since: t0, screenLocked: false), timeZone: seoul)
-        XCTAssertTrue(unlocked.body.contains("잠기지 않았어요"))
+        XCTAssertTrue(unlocked.body.contains("didn't lock"))
     }
 
     func testTokenIsReusedForFiftyMinutes() throws {

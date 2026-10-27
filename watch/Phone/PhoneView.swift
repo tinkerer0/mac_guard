@@ -23,12 +23,12 @@ struct PhoneView: View {
                     VStack(spacing: 12) {
                         primaryButton
                         HStack(spacing: 12) {
-                            tile("화면 보기", systemImage: "display", enabled: canViewScreen,
-                                 hint: status.map { !$0.armed ? "경계 중에만" : ($0.screenLocked ? "맥 잠김" : nil) } ?? nil) {
+                            tile("View Screen", systemImage: "display", enabled: canViewScreen,
+                                 hint: status.map { !$0.armed ? "Only while armed" : ($0.screenLocked ? "Mac locked" : nil) } ?? nil) {
                                 showingScreen = true
                             }
-                            tile("지금 잠그기", systemImage: "lock.fill", enabled: status.map { !$0.screenLocked } ?? false,
-                                 hint: (status?.screenLocked ?? false) ? "이미 잠김" : nil) {
+                            tile("Lock Now", systemImage: "lock.fill", enabled: status.map { !$0.screenLocked } ?? false,
+                                 hint: (status?.screenLocked ?? false) ? "Already locked" : nil) {
                                 lockNow()
                             }
                         }
@@ -73,9 +73,9 @@ struct PhoneView: View {
                         .symbolEffect(.pulse, isActive: mood == .alarm)
                 }
             }
-            Text(status == nil && connecting ? "연결하는 중" : mood.title)
+            Text(status == nil && connecting ? "Connecting" : mood.title)
                 .font(.title.bold())
-            Text(status?.summary ?? (connecting ? " " : (connectionError ?? "맥에 연결하지 못했어요")))
+            Text(status?.summary ?? (connecting ? " " : (connectionError ?? "Can't reach the Mac")))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -87,20 +87,20 @@ struct PhoneView: View {
     @ViewBuilder private var primaryButton: some View {
         if let status {
             if status.isAlarming {
-                bigButton("알람 끄기", systemImage: "bell.slash.fill", tint: .red) {
+                bigButton("Stop Alarm", systemImage: "bell.slash.fill", tint: .red) {
                     perform { try await client.acknowledgeAlarm() }
                 }
             } else if status.armed {
-                bigButton("경계 끄기", systemImage: "shield.slash", tint: .gray) {
+                bigButton("Disarm", systemImage: "shield.slash", tint: .gray) {
                     perform { try await client.disarm() }
                 }
             } else {
-                bigButton("경계 켜기", systemImage: "lock.shield.fill", tint: .green) {
+                bigButton("Arm", systemImage: "lock.shield.fill", tint: .green) {
                     perform { try await client.arm() }
                 }
             }
         } else if !connecting {
-            bigButton("다시 연결", systemImage: "arrow.clockwise", tint: .accentColor) {
+            bigButton("Reconnect", systemImage: "arrow.clockwise", tint: .accentColor) {
                 Task { await refresh() }
             }
         }
@@ -130,11 +130,11 @@ struct PhoneView: View {
             ScreenView(client: client, pixelWidth: 720, minInterval: 1)
                 .padding([.horizontal, .bottom])
                 .background(Color.black.ignoresSafeArea())
-                .navigationTitle("맥 화면")
+                .navigationTitle("Mac Screen")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button("닫기") { showingScreen = false }
+                        Button("Close") { showingScreen = false }
                     }
                 }
         }
@@ -209,7 +209,7 @@ struct PhoneView: View {
             defer { busy = false }
             do {
                 let result = try await client.lock()
-                show(result.locked ? "맥북을 잠갔어요" : "잠그지 못했어요: \(result.detail ?? result.method)")
+                show(result.locked ? "MacBook locked" : "Couldn't lock: \(result.detail ?? result.method)")
                 await refresh()
             } catch {
                 show(describe(error))
@@ -235,6 +235,6 @@ struct PhoneView: View {
     }
 
     private func describe(_ error: Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? "맥에 연결하지 못했어요"
+        (error as? LocalizedError)?.errorDescription ?? "Can't reach the Mac"
     }
 }

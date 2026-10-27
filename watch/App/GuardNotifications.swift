@@ -8,7 +8,7 @@ enum GuardNotifications {
     static let acknowledgeAction = "MAC_GUARD_ACK"
 
     static var categories: Set<UNNotificationCategory> {
-        let acknowledge = UNNotificationAction(identifier: acknowledgeAction, title: "알람 끄기", options: [.foreground])
+        let acknowledge = UNNotificationAction(identifier: acknowledgeAction, title: "Stop Alarm", options: [.foreground])
         return [
             UNNotificationCategory(identifier: alarmCategory, actions: [acknowledge], intentIdentifiers: [], options: []),
             UNNotificationCategory(identifier: infoCategory, actions: [], intentIdentifiers: [], options: []),

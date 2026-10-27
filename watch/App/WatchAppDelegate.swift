@@ -22,7 +22,7 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotificatio
     }
 
     func didFailToRegisterForRemoteNotificationsWithError(_ error: Error) {
-        model.message = "푸시 등록 실패"
+        model.message = "Push registration failed"
     }
 
     nonisolated func userNotificationCenter(
