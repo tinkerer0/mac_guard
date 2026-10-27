@@ -69,6 +69,8 @@ targets:
     platform: watchOS
     deploymentTarget: "10.0"
     sources: [App]
+    dependencies:
+      - target: MacGuardWatchWidget
     info:
       path: Support/Info.plist
       properties:
@@ -88,6 +90,32 @@ targets:
         SWIFT_VERSION: "5.0"
         PRODUCT_BUNDLE_IDENTIFIER: com.jinwoo.macguard.ios.watchkitapp
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: Y35NBHS9WU
+        TARGETED_DEVICE_FAMILY: "4"
+        GENERATE_INFOPLIST_FILE: YES
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+  # 워치 페이스 컴플리케이션. 상태를 맥에 직접 묻고 방패 색으로 보여 준다. 누르면 워치 앱이 열린다.
+  MacGuardWatchWidget:
+    type: app-extension
+    platform: watchOS
+    deploymentTarget: "10.0"
+    sources:
+      - WatchWidget
+      - App/GuardClient.swift
+      - App/GuardStyle.swift
+      - App/Secrets.generated.swift
+    info:
+      path: Support/WatchWidgetInfo.plist
+      properties:
+        CFBundleDisplayName: MacGuard
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.jinwoo.macguard.ios.watchkitapp.widget
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: Y35NBHS9WU
         TARGETED_DEVICE_FAMILY: "4"

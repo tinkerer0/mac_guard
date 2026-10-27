@@ -1,9 +1,17 @@
 import Foundation
 import WatchKit
+import WidgetKit
 
 @MainActor
 final class GuardModel: ObservableObject {
-    @Published private(set) var status: GuardStatusDTO?
+    @Published private(set) var status: GuardStatusDTO? {
+        didSet {
+            // 큰 상태가 바뀌었을 때만 컴플리케이션을 다시 그린다(다시 그리기 횟수에 하루 한도가 있다).
+            if let status, GuardMood(status) != GuardMood(oldValue) {
+                WidgetCenter.shared.reloadTimelines(ofKind: GuardWidgetKind.watchStatus)
+            }
+        }
+    }
     @Published private(set) var reachable: Bool?
     @Published private(set) var busy = false
     @Published var message: String?

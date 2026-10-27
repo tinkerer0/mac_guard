@@ -8,6 +8,8 @@ extension Locale {
 
 enum GuardWidgetKind {
     static let status = "MacGuardStatus"
+    /// 워치 페이스 컴플리케이션.
+    static let watchStatus = "MacGuardWatchStatus"
 }
 
 /// 화면에 보일 큰 상태 하나. 알람이 경계보다, 경계가 꺼짐보다 앞선다.
