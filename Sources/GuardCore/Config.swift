@@ -38,7 +38,7 @@ public struct GuardConfig: Codable, Equatable, Sendable {
     public var stateFile = "~/.config/mac_guard/state.json"
     public var logFile = "~/Library/Logs/MacGuard/agent.log"
     public var lockOnArm = false
-    public var armGraceSeconds: Double = 5
+    public var armGraceSeconds: Double = 0
     public var lockOnTouch = true
     public var alarmDelaySeconds: Double = 10
     public var alarmRepeatSeconds: Double = 15

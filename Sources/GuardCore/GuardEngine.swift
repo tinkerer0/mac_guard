@@ -3,7 +3,7 @@ import Foundation
 public struct GuardSettings: Codable, Equatable, Sendable {
     /// 경계를 켜면 바로 잠금 화면을 띄운다. 기본은 끔(경계 중에도 AI 작업이 멈추지 않게, 만질 때 잠근다).
     public var lockOnArm: Bool
-    /// 경계를 켠 직후 본인 입력으로 보고 무시하는 시간(초).
+    /// 경계를 켠 직후 본인 입력으로 보고 무시하는 시간(초). 기본 0: 켜는 즉시 감시한다(Jinwoo 2026-10-27, 맥 메뉴로 켠 경우도).
     public var armGrace: TimeInterval
     /// 경계 중 풀린 화면에서 입력이 들어오면 잠근다(경계를 켰는데 잠기지 않은 경우의 대비).
     public var lockOnTouch: Bool
@@ -18,7 +18,7 @@ public struct GuardSettings: Codable, Equatable, Sendable {
 
     public init(
         lockOnArm: Bool = false,
-        armGrace: TimeInterval = 5,
+        armGrace: TimeInterval = 0,
         lockOnTouch: Bool = true,
         alarmDelay: TimeInterval = 10,
         alarmRepeat: TimeInterval = 15,

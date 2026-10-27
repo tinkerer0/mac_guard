@@ -4,9 +4,9 @@ import XCTest
 final class GuardEngineTests: XCTestCase {
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
-    /// 유예 5초, 알람 대기 10초, 반복 15초, 최대 600초, 끈 뒤 300초.
-    private func engine(lockOnArm: Bool = true, screenLocked: Bool = false) -> GuardEngine {
-        GuardEngine(settings: GuardSettings(lockOnArm: lockOnArm), screenLocked: screenLocked)
+    /// 유예 0초(켜는 즉시 감시), 알람 대기 10초, 반복 15초, 최대 600초, 끈 뒤 300초.
+    private func engine(lockOnArm: Bool = true, armGrace: TimeInterval = 0, screenLocked: Bool = false) -> GuardEngine {
+        GuardEngine(settings: GuardSettings(lockOnArm: lockOnArm, armGrace: armGrace), screenLocked: screenLocked)
     }
 
     private func alarm(_ at: Date, since: Date, locked: Bool = true, isRepeat: Bool = false) -> GuardAction {
@@ -34,9 +34,24 @@ final class GuardEngineTests: XCTestCase {
     func testIgnoresInputWhileDisarmedOrDuringGrace() {
         let idle = engine()
         XCTAssertEqual(idle.physicalInput(at: t0), [])
-        let guardEngine = armedAndLocked()
+        // 설정으로 유예를 두면 그동안의 입력은 무시한다.
+        let guardEngine = engine(armGrace: 5)
+        _ = guardEngine.arm(at: t0)
+        _ = guardEngine.screenLockChanged(locked: true, at: t0 + 1)
         XCTAssertEqual(guardEngine.physicalInput(at: t0 + 4.9), [])
         XCTAssertFalse(guardEngine.isAlarmPending)
+        XCTAssertEqual(guardEngine.physicalInput(at: t0 + 5), [])
+        XCTAssertTrue(guardEngine.isAlarmPending)
+    }
+
+    /// 기본은 유예가 없어 켜자마자 만지면 잠그고 알람 대기에 들어간다(맥 메뉴로 켠 경우도 같다).
+    func testDefaultWatchesImmediatelyAfterArm() {
+        let guardEngine = engine(lockOnArm: false)
+        XCTAssertEqual(guardEngine.arm(at: t0), [])
+        XCTAssertEqual(guardEngine.physicalInput(at: t0 + 0.1), [.lockScreen])
+        XCTAssertTrue(guardEngine.isAlarmPending)
+        let status = guardEngine.status(inputMonitoring: true, watchRegistered: true, pushConfigured: true)
+        XCTAssertEqual(status.watchingFrom, t0)
     }
 
     func testTouchOnLockedMacRingsAfterDelay() {
@@ -140,7 +155,7 @@ final class GuardEngineTests: XCTestCase {
         var status = guardEngine.status(inputMonitoring: true, watchRegistered: true, pushConfigured: true)
         XCTAssertTrue(status.alarmPending)
         XCTAssertFalse(status.alarmActive)
-        XCTAssertEqual(status.watchingFrom, t0 + 5)
+        XCTAssertEqual(status.watchingFrom, t0)
         _ = guardEngine.tick(at: t0 + 16)
         status = guardEngine.status(inputMonitoring: true, watchRegistered: true, pushConfigured: true)
         XCTAssertTrue(status.alarmActive)

@@ -19,7 +19,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(config.dryRunLock)
         XCTAssertTrue(config.lockOnTouch)
         XCTAssertFalse(config.lockOnArm)
-        XCTAssertEqual(config.armGraceSeconds, 5)
+        XCTAssertEqual(config.armGraceSeconds, 0)
         XCTAssertNil(config.apns)
     }
 
