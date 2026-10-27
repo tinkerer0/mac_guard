@@ -470,7 +470,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         }
         if config.screenView {
             if ScreenGrabber.hasPermission() {
-                menu.addItem(info(screenViewWhenDisarmed ? "Screen view: on" : "Screen view: only while armed"))
+                // 경계 없이 화면 보기는 여기서만 켤 수 있다(원격 API는 끄기만 받음).
+                let item = action("View Screen Without Arming", #selector(toggleScreenViewWhenDisarmed))
+                item.state = screenViewWhenDisarmed ? .on : .off
+                menu.addItem(item)
             } else {
                 menu.addItem(action("Allow Screen Recording…", #selector(openScreenCaptureSettings)))
             }
@@ -493,6 +496,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
         item.target = self
         return item
+    }
+
+    @objc private func toggleScreenViewWhenDisarmed() {
+        _ = updateSettings(SettingsUpdate(screenViewWhenDisarmed: !screenViewWhenDisarmed))
     }
 
     @objc private func toggleArmed() {

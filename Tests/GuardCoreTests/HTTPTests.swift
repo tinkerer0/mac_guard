@@ -113,11 +113,19 @@ final class APIRouterTests: XCTestCase {
 
     func testSettingsAcceptsKnownValuesInRange() {
         XCTAssertEqual(router.handle(request("POST", "/v1/settings", body: #"{"alarmDelaySeconds":3}"#)).status, 200)
-        XCTAssertEqual(router.handle(request("POST", "/v1/settings", body: #"{"lockOnTouch":false,"armGraceSeconds":0,"screenViewWhenDisarmed":true}"#)).status, 200)
+        XCTAssertEqual(router.handle(request("POST", "/v1/settings", body: #"{"lockOnTouch":false,"armGraceSeconds":0,"screenViewWhenDisarmed":false}"#)).status, 200)
         XCTAssertEqual(service.settingsUpdates, [
             SettingsUpdate(alarmDelaySeconds: 3),
-            SettingsUpdate(lockOnTouch: false, armGraceSeconds: 0, screenViewWhenDisarmed: true),
+            SettingsUpdate(lockOnTouch: false, armGraceSeconds: 0, screenViewWhenDisarmed: false),
         ])
+    }
+
+    /// 경계 없이 화면 보기는 맥 메뉴에서만 켠다. 원격으로 켜려 하면 다른 항목도 바꾸지 않고 거절한다.
+    func testSettingsRefusesRemoteScreenViewEnable() {
+        let response = router.handle(request("POST", "/v1/settings", body: #"{"alarmDelaySeconds":3,"screenViewWhenDisarmed":true}"#))
+        XCTAssertEqual(response.status, 403)
+        XCTAssertTrue(String(decoding: response.body, as: UTF8.self).contains("enable-on-mac"))
+        XCTAssertTrue(service.settingsUpdates.isEmpty)
     }
 
     func testSettingsRejectsEmptyOrOutOfRangeValues() {

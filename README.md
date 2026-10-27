@@ -28,7 +28,8 @@
 ## 화면 보기
 
 설정 `screenView: true`이면 워치·아이폰에서 맥 화면을 받아 본다. 자리를 비운 동안 AI 작업을 확인하는 용도라
-경계 중이면서 맥이 풀려 있고 화면이 켜져 있을 때만 찍는다(잠기면 잠금 화면만 보이므로 찍지 않는다). 설정 `screenViewWhenDisarmed: true`이면 경계를 켜지 않아도 찍는다(2026-10-27 Jinwoo 요청으로 켬 — 이때는 토큰만 있으면 책상 앞에 있을 때의 화면도 보인다). 잠김 여부를 못 읽으면 잠긴 것으로 본다.
+경계 중이면서 맥이 풀려 있고 화면이 켜져 있을 때만 찍는다(잠기면 잠금 화면만 보이므로 찍지 않는다). 설정 `screenViewWhenDisarmed: true`이면 경계를 켜지 않아도 찍는다(2026-10-27 Jinwoo 요청으로 켬 — 이때는 토큰만 있으면 책상 앞에 있을 때의 화면도 보인다).
+이 설정은 맥 메뉴 "View Screen Without Arming"에서만 켤 수 있다. `/v1/settings`로 켜려 하면 403 `enable-on-mac`이고, 끄기는 앱에서도 된다. 잠김 여부를 못 읽으면 잠긴 것으로 본다.
 보는 동안 계속 받아 온다(한 장을 다 받으면 다음 장, 아이폰은 1초·워치는 3초 간격 이상). 그림을 누르면 그 자리를 3배로 확대해 받고 "Full Screen"로 돌아간다.
 화면을 떠나거나 앱이 활성 상태가 아니면(워치는 손목을 내리면) 받지 않는다. 맥이 거절하면(경계 꺼짐·잠김·화면 꺼짐 등) 멈추고 이유와 "Resume"을 보여 준다.
 맥 앱은 바꾸지 않았다(같은 `POST /v1/screen`을 이어서 부름). 빠르기는 맥이 찍는 시간이 아니라 공개 주소로 받는 시간에 달려 있다.
@@ -89,7 +90,7 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 
 ## API (127.0.0.1만, `Authorization: Bearer <토큰>`)
 
-`GET /v1/status`, `POST /v1/arm {"lockOnTouch"?}`, `POST /v1/disarm`, `POST /v1/settings {"lockOnTouch"?, "alarmDelaySeconds"? (0~60), "armGraceSeconds"? (0~30), "screenViewWhenDisarmed"?}`(아이폰 앱 Settings 화면이 부름, 바꾼 항목만 config.json에 0600으로 남김, 범위 밖은 400·저장 실패는 500), `POST /v1/lock`, `POST /v1/ack`, `POST /v1/watch-token {"token","environment"?}`, `POST /v1/phone-token {"token","environment"?}`,
+`GET /v1/status`, `POST /v1/arm {"lockOnTouch"?}`, `POST /v1/disarm`, `POST /v1/settings {"lockOnTouch"?, "alarmDelaySeconds"? (0~60), "armGraceSeconds"? (0~30), "screenViewWhenDisarmed"?(false만)}`(아이폰 앱 Settings 화면이 부름, 바꾼 항목만 config.json에 0600으로 남김, 범위 밖은 400·저장 실패는 500), `POST /v1/lock`, `POST /v1/ack`, `POST /v1/watch-token {"token","environment"?}`, `POST /v1/phone-token {"token","environment"?}`,
 `POST /v1/screen {"width"?, "region"?: {"x","y","width","height"}}`(성공은 `image/jpeg`, 거절은 403·409·429·503과 코드 `disabled`·`disarmed`·`locked`·`display-asleep`·`permission`·`too-soon`·`capture-failed`).
 토큰이 틀리면 경로가 있는지도 알려 주지 않고 401을 준다. 바깥에서 오는 요청은 중계(예: tailscale funnel)가 이 주소로 넘겨준다.
 

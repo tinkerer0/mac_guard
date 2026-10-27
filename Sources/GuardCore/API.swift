@@ -108,6 +108,8 @@ public final class APIRouter {
             return .json(200, service.disarm())
         case ("POST", "/v1/settings"):
             guard let body = decode(SettingsUpdate.self, request.body), body.isValid else { return .error(400, "bad body") }
+            // 경계 없이 화면 보기는 맥 메뉴에서만 켠다. 토큰이 새도 원격으로 책상 앞 화면을 열지 못하게, 원격으로는 끄기만 받는다.
+            if body.screenViewWhenDisarmed == true { return .error(403, "enable-on-mac") }
             guard let status = service.updateSettings(body) else { return .error(500, "settings save failed") }
             return .json(200, status)
         case ("POST", "/v1/ack"):

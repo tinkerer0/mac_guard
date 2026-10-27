@@ -36,11 +36,13 @@ struct SettingsView: View {
                         Text("How long after arming before touches count.")
                     }
                     Section {
+                        // 켜기는 맥 메뉴에서만 된다(맥이 원격 켜기를 거절함). 여기서는 켜져 있을 때 끄기만.
                         Toggle("View screen without arming", isOn: binding(status.screenViewWhenDisarmed ?? false, key: "screenViewWhenDisarmed"))
+                            .disabled(!(status.screenViewWhenDisarmed ?? false))
                     } header: {
                         Text("Screen")
                     } footer: {
-                        Text("When on, anyone with this app's access token can see your Mac screen while it's unlocked, even when you're at your desk.")
+                        Text("Turn this on from the MacGuard menu on your Mac. You can turn it off here. While on, anyone with this app's access token can see your Mac screen while it's unlocked.")
                     }
                 } else if status == nil {
                     Text("Can't reach the Mac")
