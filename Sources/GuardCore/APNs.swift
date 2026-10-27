@@ -44,6 +44,8 @@ public struct APNsMessage: Equatable, Sendable {
     public var category: String
     public var collapseID: String?
     public var kind: AlertKind
+    /// 소리·진동 없이 알림 목록에만 남긴다(아이폰용).
+    public var quiet = false
 
     public static func make(for alert: GuardAlert, timeZone: TimeZone = .current) -> APNsMessage {
         let time = clock(alert.at, timeZone: timeZone)
@@ -73,13 +75,23 @@ public struct APNsMessage: Equatable, Sendable {
         }
     }
 
+    /// 기기마다 알림 ID를 따로 붙인다. 같은 ID로 두 기기에 보내면 iOS가 한 기기에만 보여 줘서,
+    /// 아이폰을 쓰는 중에는 워치가 울리지 않았다(2026-10-27 실기). 아이폰은 조용한 알림으로 보내
+    /// 진동은 워치에서만 온다(Jinwoo: 워치만 울리고 아이폰은 알림만).
+    public func forDevice(_ role: DeviceRole) -> APNsMessage {
+        var copy = self
+        copy.collapseID = collapseID.map { "\($0)-\(role.rawValue)" }
+        copy.quiet = role == .phone
+        return copy
+    }
+
     public func payload() -> Data {
-        let aps: [String: Any] = [
+        var aps: [String: Any] = [
             "alert": ["title": title, "body": body],
-            "sound": "default",
             "category": category,
-            "interruption-level": "time-sensitive",
+            "interruption-level": quiet ? "passive" : "time-sensitive",
         ]
+        if !quiet { aps["sound"] = "default" }
         let object: [String: Any] = ["aps": aps, "kind": kind.rawValue]
         return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data()
     }

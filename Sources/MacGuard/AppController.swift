@@ -356,7 +356,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     /// 워치는 알람이 반복될 때마다, 아이폰은 처음 한 번만 받는다(DeviceRole.receives).
-    /// 두 기기에 같은 알림 ID로 보내 시스템이 같은 알림으로 알아볼 수 있게 한다.
+    /// 기기마다 다른 알림 ID로 보내고, 아이폰은 조용한 알림이라 진동은 워치에서만 온다(APNsMessage.forDevice).
     private func send(_ alert: GuardAlert) {
         log.write("alert", "\(alert.kind.rawValue) locked=\(alert.screenLocked) repeat=\(alert.isRepeat)")
         guard let sender, let apns = config.apns else {
@@ -368,7 +368,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         if targets.isEmpty { log.write("push-skipped", "no registered devices") }
         for (role, device) in targets {
             let topic = role == .watch ? apns.topic : apns.resolvedPhoneTopic
-            sender.send(message, to: device.deviceToken, environment: device.environment ?? apns.environment, topic: topic) { [log] result, reason in
+            sender.send(message.forDevice(role), to: device.deviceToken, environment: device.environment ?? apns.environment, topic: topic) { [log] result, reason in
                 switch result {
                 case .success(let status):
                     log.write("push", "role=\(role.rawValue) status=\(status) reason=\(reason ?? "-")")
