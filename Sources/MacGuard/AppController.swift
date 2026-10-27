@@ -419,7 +419,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         let symbol = engine.isAlarmActive ? "bell.and.waves.left.and.right.fill" : (engine.isArmed ? "lock.shield.fill" : "lock.shield")
         statusItem?.button?.image = NSImage(
             systemSymbolName: symbol,
-            accessibilityDescription: engine.isAlarmActive ? "맥 지킴이: 알람" : (engine.isArmed ? "맥 지킴이: 경계 중" : "맥 지킴이: 꺼짐")
+            accessibilityDescription: engine.isAlarmActive ? "MacGuard: 알람" : (engine.isArmed ? "MacGuard: 경계 중" : "MacGuard: 꺼짐")
         )
     }
 

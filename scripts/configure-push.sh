@@ -40,5 +40,5 @@ PY
 echo "푸시 설정을 넣었어요: Key ID $key_id, 환경 $environment"
 if [[ -z "${MAC_GUARD_HOME:-}" ]] && launchctl print "gui/$(id -u)/com.jinwoo.macguard" >/dev/null 2>&1; then
   launchctl kickstart -k "gui/$(id -u)/com.jinwoo.macguard"
-  echo "맥 지킴이를 다시 켰어요."
+  echo "MacGuard를 다시 켰어요."
 fi

@@ -32,7 +32,7 @@ targets:
         DEVELOPMENT_TEAM: Y35NBHS9WU
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: 맥 지킴이
+        INFOPLIST_KEY_CFBundleDisplayName: MacGuard
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         # 맥 화면을 가로로 크게 보려고 가로 방향을 허용한다.
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
@@ -51,7 +51,7 @@ targets:
     info:
       path: Support/WidgetInfo.plist
       properties:
-        CFBundleDisplayName: 맥 지킴이
+        CFBundleDisplayName: MacGuard
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
@@ -72,7 +72,7 @@ targets:
     info:
       path: Support/Info.plist
       properties:
-        CFBundleDisplayName: 맥 지킴이
+        CFBundleDisplayName: MacGuard
         WKCompanionAppBundleIdentifier: com.jinwoo.macguard.ios
         WKRunsIndependentlyOfCompanionApp: true
         # 시뮬레이터에서 http://127.0.0.1 로 맥 앱을 부를 때만 필요하다. 실제 주소는 https.

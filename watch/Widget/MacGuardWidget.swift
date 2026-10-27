@@ -17,7 +17,7 @@ struct MacGuardStatusWidget: Widget {
             GuardWidgetView(entry: entry)
                 .containerBackground(.background, for: .widget)
         }
-        .configurationDisplayName("맥 지킴이")
+        .configurationDisplayName("MacGuard")
         .description("경계 상태를 보고 바로 켜고 끕니다.")
         .supportedFamilies([.systemSmall])
     }
@@ -111,7 +111,7 @@ enum GuardIntentClient {
 }
 
 struct SetGuardIntent: AppIntent {
-    static let title: LocalizedStringResource = "맥 지킴이 경계 켜기·끄기"
+    static let title: LocalizedStringResource = "MacGuard 경계 켜기·끄기"
     static let isDiscoverable = false
 
     @Parameter(title: "켜기")
@@ -131,7 +131,7 @@ struct SetGuardIntent: AppIntent {
 }
 
 struct AcknowledgeAlarmIntent: AppIntent {
-    static let title: LocalizedStringResource = "맥 지킴이 알람 끄기"
+    static let title: LocalizedStringResource = "MacGuard 알람 끄기"
     static let isDiscoverable = false
 
     func perform() async throws -> some IntentResult {

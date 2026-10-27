@@ -40,7 +40,7 @@ struct PhoneView: View {
                 .padding(.top, 40)
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("맥 지킴이")
+            .navigationTitle("MacGuard")
             .navigationBarTitleDisplayMode(.inline)
             .refreshable { await refresh() }
             .task {

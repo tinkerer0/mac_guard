@@ -17,7 +17,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 	<key>CFBundleDevelopmentRegion</key>
 	<string>ko</string>
 	<key>CFBundleDisplayName</key>
-	<string>맥 지킴이</string>
+	<string>MacGuard</string>
 	<key>CFBundleExecutable</key>
 	<string>MacGuard</string>
 	<key>CFBundleIdentifier</key>
@@ -25,7 +25,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>맥 지킴이</string>
+	<string>MacGuard</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
