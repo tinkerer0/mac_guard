@@ -356,7 +356,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     }
 
     /// 아이폰에 한 번씩만 보낸다(DeviceRole.receives). 반복 알람은 맥 안에서만 상태로 남고 보내지 않는다.
-    /// 두 기기에 같은 알림 ID로 보내 시스템이 같은 알림으로 알아볼 수 있게 한다.
+    /// 워치는 아이폰이 잠겨 있을 때 iOS가 넘겨줘서 울린다.
     private func send(_ alert: GuardAlert) {
         log.write("alert", "\(alert.kind.rawValue) locked=\(alert.screenLocked) repeat=\(alert.isRepeat)")
         guard let sender, let apns = config.apns else {
@@ -370,13 +370,27 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         if targets.isEmpty { log.write("push-skipped", "no registered devices") }
         for (role, device) in targets {
             let topic = role == .watch ? apns.topic : apns.resolvedPhoneTopic
-            sender.send(message, to: device.deviceToken, environment: device.environment ?? apns.environment, topic: topic) { [log] result, reason in
-                switch result {
-                case .success(let status):
-                    log.write("push", "role=\(role.rawValue) status=\(status) reason=\(reason ?? "-")")
-                case .failure(let error):
-                    log.write("push-failed", "role=\(role.rawValue) \(error.localizedDescription)")
-                }
+            deliver(message, role: role, token: device.deviceToken, environment: device.environment ?? apns.environment, topic: topic)
+        }
+    }
+
+    /// 알림을 한 번만 보내므로, 연결 실패나 APNs의 일시 오류(429·5xx)면 5초·10초 뒤 두 번까지 다시 보낸다
+    /// (깨어난 직후 Wi-Fi가 다시 붙는 동안 하나뿐인 알람이 사라지지 않게). 400·403·410 같은 거절은 다시 보내지 않는다.
+    private func deliver(_ message: APNsMessage, role: DeviceRole, token: String, environment: APNsEnvironment, topic: String, attempt: Int = 1) {
+        guard let sender else { return }
+        sender.send(message, to: token, environment: environment, topic: topic) { [weak self, log] result, reason in
+            let retry: Bool
+            switch result {
+            case .success(let status):
+                log.write("push", "role=\(role.rawValue) status=\(status) reason=\(reason ?? "-") attempt=\(attempt)")
+                retry = status == 429 || status >= 500
+            case .failure(let error):
+                log.write("push-failed", "role=\(role.rawValue) attempt=\(attempt) \(error.localizedDescription)")
+                retry = true
+            }
+            guard retry, attempt < 3 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5 * Double(attempt)) {
+                self?.deliver(message, role: role, token: token, environment: environment, topic: topic, attempt: attempt + 1)
             }
         }
     }
@@ -390,12 +404,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
                 self?.noteAuthFailure(request)
             }
             var lastClient = ""
+            var lastScreenLog = Date.distantPast
             // 토큰이 없는 요청은 헤더만 보고 끊어 본문을 기다리느라 자리를 막지 않게 한다.
             let server = LocalHTTPServer(port: config.port, headCheck: { router.checkHead($0) }) { [log] request in
                 let response = router.handle(request)
                 // 워치는 5초마다 상태를 물어서 상태 요청은 접속 프로그램이 바뀔 때만 남긴다.
                 let client = String(request.headers["user-agent"]?.split(separator: " ").first ?? "?")
-                if response.status != 401, !(request.path == "/v1/status" && response.status == 200) || client != lastClient {
+                // 화면 보기는 보는 동안 계속 부르므로 성공한 요청은 1분에 한 줄만 남긴다(기록이 밀려나지 않게).
+                let screenFrame = request.path == "/v1/screen" && response.status == 200
+                let quietFrame = screenFrame && Date().timeIntervalSince(lastScreenLog) < 60
+                if screenFrame, !quietFrame { lastScreenLog = Date() }
+                if response.status != 401, !quietFrame, !(request.path == "/v1/status" && response.status == 200) || client != lastClient {
                     log.write("api", "\(request.method) \(request.path) \(response.status) client=\(client)")
                 }
                 if response.status == 200 { lastClient = client }

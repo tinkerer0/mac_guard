@@ -239,8 +239,18 @@ public enum ConfigFile {
         let folder = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let temporary = folder.appendingPathComponent(".config.\(UUID().uuidString).tmp")
-        guard FileManager.default.createFile(atPath: temporary.path, contents: output, attributes: [.posixPermissions: 0o600]) else {
+        guard FileManager.default.createFile(atPath: temporary.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
             throw ConfigFileError.writeFailed(errno)
+        }
+        // 바꿔 넣기 전에 디스크에 확실히 쓴다. 전원이 나가 빈 config.json이 남으면 앱이 켜지지 않는다.
+        do {
+            let handle = try FileHandle(forWritingTo: temporary)
+            defer { try? handle.close() }
+            try handle.write(contentsOf: output)
+            try handle.synchronize()
+        } catch {
+            try? FileManager.default.removeItem(at: temporary)
+            throw error
         }
         if rename(temporary.path, url.path) != 0 {
             let code = errno

@@ -23,7 +23,7 @@ struct SettingsView: View {
                     } header: {
                         Text("Alarm")
                     } footer: {
-                        Text("When someone touches the Mac, it locks right away. If it isn't unlocked within this time, your Apple Watch alarm starts and your iPhone gets one notification.")
+                        Text("When someone touches the Mac, it locks right away. If it isn't unlocked within this time, your iPhone gets a notification. Your Apple Watch shows it too when the iPhone is locked.")
                     }
                     Section {
                         Toggle("Lock when touched", isOn: binding(status.lockOnTouch, key: "lockOnTouch"))

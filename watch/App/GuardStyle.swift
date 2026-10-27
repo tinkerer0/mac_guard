@@ -77,7 +77,6 @@ extension GuardStatusDTO {
         var list: [String] = []
         if !inputMonitoring { list.append("Allow Input Monitoring on the Mac") }
         if !pushConfigured { list.append("No APNs key: alarms can't reach your devices") }
-        if !watchRegistered { list.append("Apple Watch isn't registered yet") }
         if !(phoneRegistered ?? false) { list.append("iPhone isn't registered yet") }
         return list
     }

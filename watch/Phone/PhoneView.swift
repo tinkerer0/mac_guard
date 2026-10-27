@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 /// 맥 상태 하나와 버튼 셋만 두는 화면. 고칠 것이 있을 때만 아래에 한 줄씩 보인다.
-/// 알람은 워치에서 끌 때까지 울리고, 아이폰은 처음 한 번만 알림을 받는다.
+/// 알림은 아이폰에 한 번 오고, 아이폰이 잠겨 있으면 워치로도 넘어간다.
 struct PhoneView: View {
     @State private var status: GuardStatusDTO?
     @State private var connecting = true

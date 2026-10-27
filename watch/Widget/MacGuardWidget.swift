@@ -114,6 +114,8 @@ enum GuardIntentClient {
 struct SetGuardIntent: AppIntent {
     static let title: LocalizedStringResource = "Arm or Disarm MacGuard"
     static let isDiscoverable = false
+    /// 잠긴 아이폰(잠금 화면·StandBy)에서 누르면 먼저 잠금을 풀게 한다. 남이 경계를 끄지 못하게.
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @Parameter(title: "Arm")
     var on: Bool
@@ -134,6 +136,7 @@ struct SetGuardIntent: AppIntent {
 struct AcknowledgeAlarmIntent: AppIntent {
     static let title: LocalizedStringResource = "Stop MacGuard Alarm"
     static let isDiscoverable = false
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     func perform() async throws -> some IntentResult {
         _ = try await GuardIntentClient.shared.acknowledgeAlarm()

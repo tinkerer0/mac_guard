@@ -132,8 +132,12 @@ struct ScreenView: View {
                 case GuardClientError.screen("capture-failed"):
                     failures += 1
                     trouble = "Capture failed"
+                case GuardClientError.screen("locked"), GuardClientError.screen("display-asleep"), GuardClientError.screen("disarmed"):
+                    // 잠김·화면 꺼짐·경계 전환은 곧 바뀔 수 있어 멈추지 않고 10초마다 다시 본다.
+                    trouble = describe(error)
+                    pause = 10
                 case GuardClientError.screen, GuardClientError.http(401):
-                    // 경계 꺼짐·잠김·화면 꺼짐·권한·토큰: 다시 불러도 같은 답이라 멈춘다.
+                    // 화면 보기 꺼짐·권한·토큰: 맥이나 앱을 고치기 전엔 같은 답이라 멈춘다.
                     stopped = describe(error)
                     return
                 default:
