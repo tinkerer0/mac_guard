@@ -6,6 +6,10 @@ import GuardCore
 /// 전원·잠자기·화면·Lid Mode 설정은 읽지도 바꾸지도 않는다. 화면 보기는 화면을 깨우지 않고 그림을 파일로 남기지 않는다.
 final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, GuardService {
     private let config: GuardConfig
+    /// 설정 화면에서 바꾼 값을 남길 파일(nil이면 기본 위치).
+    private let configPath: String?
+    /// 설정 화면에서 바뀔 수 있어 config와 따로 둔다. 메인에서만 바뀐다.
+    private var screenViewWhenDisarmed: Bool
     private let log: EventLog
     private let engine: GuardEngine
     private var devices: DeviceRegistrations
@@ -28,8 +32,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     private var authFailureWindow = Date.distantPast
     private var lastScreenshotAt = Date.distantPast
 
-    init(config: GuardConfig) {
+    init(config: GuardConfig, configPath: String?) {
         self.config = config
+        self.configPath = configPath
+        screenViewWhenDisarmed = config.screenViewWhenDisarmed
         log = EventLog(path: config.logFile)
         engine = GuardEngine(settings: config.settings, screenLocked: ScreenLocker.isScreenLocked())
         devices = StateStore.load(from: config.stateFile)
@@ -49,7 +55,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
             log.write("screen-capture-missing")
             ScreenGrabber.requestPermission()
         }
-        log.write("started", "port=\(server?.port ?? 0) input=\(inputMonitoring) push=\(sender != nil) watch=\(devices.watch != nil) phone=\(devices.phone != nil) screen=\(config.screenView) screenDisarmed=\(config.screenViewWhenDisarmed)")
+        log.write("started", "port=\(server?.port ?? 0) input=\(inputMonitoring) push=\(sender != nil) watch=\(devices.watch != nil) phone=\(devices.phone != nil) screen=\(config.screenView) screenDisarmed=\(screenViewWhenDisarmed) alarmDelay=\(Int(engine.settings.alarmDelay))s")
         refreshIcon()
     }
 
@@ -79,10 +85,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         }
     }
 
-    func setLockOnTouch(_ on: Bool) -> GuardStatus {
+    /// 파일에 먼저 남기고 성공했을 때만 적용한다(다시 켜도 같은 값이 되게).
+    func updateSettings(_ update: SettingsUpdate) -> GuardStatus? {
         onMain {
-            engine.setLockOnTouch(on)
-            log.write("lock-on-touch", on ? "on" : "off")
+            do {
+                try ConfigFile.merge(update, into: configPath)
+            } catch {
+                log.write("settings-save-failed", String(describing: error))
+                return nil
+            }
+            engine.apply(update)
+            if let value = update.screenViewWhenDisarmed { screenViewWhenDisarmed = value }
+            log.write("settings", update.summary)
             return makeStatus()
         }
     }
@@ -163,7 +177,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     /// 잠김 여부를 못 읽으면 잠긴 것으로 본다.
     private func screenRefusal() -> ScreenRefusal? {
         if !config.screenView { return .disabled }
-        if !engine.isArmed, !config.screenViewWhenDisarmed { return .disarmed }
+        if !engine.isArmed, !screenViewWhenDisarmed { return .disarmed }
         if ScreenLocker.lockState() ?? true { return .locked }
         if ScreenGrabber.isDisplayAsleep() { return .displayAsleep }
         if !ScreenGrabber.hasPermission() { return .permission }
@@ -435,7 +449,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
         }
         if config.screenView {
             if ScreenGrabber.hasPermission() {
-                menu.addItem(info(config.screenViewWhenDisarmed ? "Screen view: on" : "Screen view: only while armed"))
+                menu.addItem(info(screenViewWhenDisarmed ? "Screen view: on" : "Screen view: only while armed"))
             } else {
                 menu.addItem(action("Allow Screen Recording…", #selector(openScreenCaptureSettings)))
             }
@@ -489,7 +503,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate, Guar
     // MARK: - 기타
 
     private func makeStatus() -> GuardStatus {
-        engine.status(inputMonitoring: inputMonitoring, watchRegistered: devices.watch != nil, phoneRegistered: devices.phone != nil, pushConfigured: sender != nil)
+        var status = engine.status(inputMonitoring: inputMonitoring, watchRegistered: devices.watch != nil, phoneRegistered: devices.phone != nil, pushConfigured: sender != nil)
+        status.screenViewWhenDisarmed = screenViewWhenDisarmed
+        return status
     }
 
     private func onMain<T>(_ work: () -> T) -> T {

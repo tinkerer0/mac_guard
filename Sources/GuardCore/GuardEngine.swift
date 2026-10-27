@@ -82,6 +82,10 @@ public struct GuardStatus: Codable, Equatable, Sendable {
     public var watchRegistered: Bool
     public var phoneRegistered: Bool
     public var pushConfigured: Bool
+    /// 설정 화면이 보여 주는 현재 값.
+    public var alarmDelaySeconds: Double?
+    public var armGraceSeconds: Double?
+    public var screenViewWhenDisarmed: Bool?
 
     public init(
         armed: Bool,
@@ -96,7 +100,10 @@ public struct GuardStatus: Codable, Equatable, Sendable {
         inputMonitoring: Bool,
         watchRegistered: Bool,
         phoneRegistered: Bool = false,
-        pushConfigured: Bool
+        pushConfigured: Bool,
+        alarmDelaySeconds: Double? = nil,
+        armGraceSeconds: Double? = nil,
+        screenViewWhenDisarmed: Bool? = nil
     ) {
         self.armed = armed
         self.armedAt = armedAt
@@ -111,6 +118,9 @@ public struct GuardStatus: Codable, Equatable, Sendable {
         self.watchRegistered = watchRegistered
         self.phoneRegistered = phoneRegistered
         self.pushConfigured = pushConfigured
+        self.alarmDelaySeconds = alarmDelaySeconds
+        self.armGraceSeconds = armGraceSeconds
+        self.screenViewWhenDisarmed = screenViewWhenDisarmed
     }
 }
 
@@ -164,6 +174,13 @@ public final class GuardEngine {
 
     public func setLockOnTouch(_ on: Bool) {
         settings.lockOnTouch = on
+    }
+
+    /// 앱 설정 화면에서 바꾼 값. 경계 중에 바꿔도 다음 입력·tick부터 새 값을 쓴다.
+    public func apply(_ update: SettingsUpdate) {
+        if let value = update.lockOnTouch { settings.lockOnTouch = value }
+        if let value = update.alarmDelaySeconds { settings.alarmDelay = value }
+        if let value = update.armGraceSeconds { settings.armGrace = value }
     }
 
     /// 실제 기기 입력(또는 경계 중 깨어남). 경계를 켠 직후 유예 시간 안의 입력은 무시한다.
@@ -235,7 +252,9 @@ public final class GuardEngine {
             inputMonitoring: inputMonitoring,
             watchRegistered: watchRegistered,
             phoneRegistered: phoneRegistered,
-            pushConfigured: pushConfigured
+            pushConfigured: pushConfigured,
+            alarmDelaySeconds: settings.alarmDelay,
+            armGraceSeconds: settings.armGrace
         )
     }
 

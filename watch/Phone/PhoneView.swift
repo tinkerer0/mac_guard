@@ -12,6 +12,7 @@ struct PhoneView: View {
     @State private var message: String?
     @State private var busy = false
     @State private var showingScreen = false
+    @State private var showingSettings = false
 
     private let client = GuardClient(baseURL: GuardSecrets.baseURL, token: GuardSecrets.token)
 
@@ -49,6 +50,19 @@ struct PhoneView: View {
                     await refresh()
                     try? await Task.sleep(for: .seconds(5))
                 }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
+                }
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView(client: client, status: $status)
             }
             .fullScreenCover(isPresented: $showingScreen) {
                 screenSheet

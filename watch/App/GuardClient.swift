@@ -16,6 +16,10 @@ struct GuardStatusDTO: Decodable, Equatable {
     var watchRegistered: Bool
     var phoneRegistered: Bool?
     var pushConfigured: Bool
+    /// 설정 화면용. 예전 맥 앱은 보내지 않는다.
+    var alarmDelaySeconds: Double?
+    var armGraceSeconds: Double?
+    var screenViewWhenDisarmed: Bool?
 }
 
 struct LockResultDTO: Decodable, Equatable {
@@ -66,7 +70,12 @@ struct GuardClient {
     }
 
     func setLockOnTouch(_ on: Bool) async throws -> GuardStatusDTO {
-        try await call("POST", "/v1/settings", body: ["lockOnTouch": on])
+        try await updateSettings(["lockOnTouch": on])
+    }
+
+    /// 맥 설정 바꾸기. 키는 lockOnTouch·alarmDelaySeconds·armGraceSeconds·screenViewWhenDisarmed, 맥이 파일에 남긴다.
+    func updateSettings(_ values: [String: Any]) async throws -> GuardStatusDTO {
+        try await call("POST", "/v1/settings", body: values)
     }
 
     func lock() async throws -> LockResultDTO {

@@ -17,7 +17,8 @@ public protocol GuardService: AnyObject {
     func currentStatus() -> GuardStatus
     func arm(lockOnTouch: Bool?) -> GuardStatus
     func disarm() -> GuardStatus
-    func setLockOnTouch(_ on: Bool) -> GuardStatus
+    /// 앱 설정 화면에서 바꾼 값을 적용하고 설정 파일에 남긴다. 저장하지 못하면 아무것도 바꾸지 않고 nil.
+    func updateSettings(_ update: SettingsUpdate) -> GuardStatus?
     func lockNow() -> LockResult
     /// 울리거나 울릴 참인 알람을 끈다.
     func acknowledgeAlarm() -> GuardStatus
@@ -28,7 +29,41 @@ public protocol GuardService: AnyObject {
 }
 
 private struct ArmBody: Decodable { var lockOnTouch: Bool? }
-private struct SettingsBody: Decodable { var lockOnTouch: Bool }
+/// 앱 설정 화면에서 바꾸는 값. 빠진 항목은 그대로 둔다.
+public struct SettingsUpdate: Codable, Equatable, Sendable {
+    public static let alarmDelayRange: ClosedRange<Double> = 0...60
+    public static let armGraceRange: ClosedRange<Double> = 0...30
+
+    public var lockOnTouch: Bool?
+    public var alarmDelaySeconds: Double?
+    public var armGraceSeconds: Double?
+    public var screenViewWhenDisarmed: Bool?
+
+    public init(lockOnTouch: Bool? = nil, alarmDelaySeconds: Double? = nil, armGraceSeconds: Double? = nil, screenViewWhenDisarmed: Bool? = nil) {
+        self.lockOnTouch = lockOnTouch
+        self.alarmDelaySeconds = alarmDelaySeconds
+        self.armGraceSeconds = armGraceSeconds
+        self.screenViewWhenDisarmed = screenViewWhenDisarmed
+    }
+
+    /// 바꿀 값이 하나 이상 있고 숫자가 모두 허용 범위 안이면 true.
+    public var isValid: Bool {
+        guard lockOnTouch != nil || alarmDelaySeconds != nil || armGraceSeconds != nil || screenViewWhenDisarmed != nil else { return false }
+        if let value = alarmDelaySeconds, !(value.isFinite && Self.alarmDelayRange.contains(value)) { return false }
+        if let value = armGraceSeconds, !(value.isFinite && Self.armGraceRange.contains(value)) { return false }
+        return true
+    }
+
+    /// 기록용 한 줄. 바꾼 항목만.
+    public var summary: String {
+        var parts: [String] = []
+        if let lockOnTouch { parts.append("lockOnTouch=\(lockOnTouch)") }
+        if let alarmDelaySeconds { parts.append("alarmDelay=\(alarmDelaySeconds)s") }
+        if let armGraceSeconds { parts.append("armGrace=\(armGraceSeconds)s") }
+        if let screenViewWhenDisarmed { parts.append("screenViewWhenDisarmed=\(screenViewWhenDisarmed)") }
+        return parts.joined(separator: " ")
+    }
+}
 private struct WatchTokenBody: Decodable {
     var token: String
     var environment: APNsEnvironment?
@@ -72,8 +107,9 @@ public final class APIRouter {
         case ("POST", "/v1/disarm"):
             return .json(200, service.disarm())
         case ("POST", "/v1/settings"):
-            guard let body = decode(SettingsBody.self, request.body) else { return .error(400, "bad body") }
-            return .json(200, service.setLockOnTouch(body.lockOnTouch))
+            guard let body = decode(SettingsUpdate.self, request.body), body.isValid else { return .error(400, "bad body") }
+            guard let status = service.updateSettings(body) else { return .error(500, "settings save failed") }
+            return .json(200, status)
         case ("POST", "/v1/ack"):
             return .json(200, service.acknowledgeAlarm())
         case ("POST", "/v1/lock"):

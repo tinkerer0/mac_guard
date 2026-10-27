@@ -88,7 +88,7 @@ cd watch && xcodegen generate            # MacGuardWatch.xcodeproj 생성
 
 ## API (127.0.0.1만, `Authorization: Bearer <토큰>`)
 
-`GET /v1/status`, `POST /v1/arm {"lockOnTouch"?}`, `POST /v1/disarm`, `POST /v1/settings {"lockOnTouch"}`, `POST /v1/lock`, `POST /v1/ack`, `POST /v1/watch-token {"token","environment"?}`, `POST /v1/phone-token {"token","environment"?}`,
+`GET /v1/status`, `POST /v1/arm {"lockOnTouch"?}`, `POST /v1/disarm`, `POST /v1/settings {"lockOnTouch"?, "alarmDelaySeconds"? (0~60), "armGraceSeconds"? (0~30), "screenViewWhenDisarmed"?}`(아이폰 앱 Settings 화면이 부름, 바꾼 항목만 config.json에 0600으로 남김, 범위 밖은 400·저장 실패는 500), `POST /v1/lock`, `POST /v1/ack`, `POST /v1/watch-token {"token","environment"?}`, `POST /v1/phone-token {"token","environment"?}`,
 `POST /v1/screen {"width"?, "region"?: {"x","y","width","height"}}`(성공은 `image/jpeg`, 거절은 403·409·429·503과 코드 `disabled`·`disarmed`·`locked`·`display-asleep`·`permission`·`too-soon`·`capture-failed`).
 토큰이 틀리면 경로가 있는지도 알려 주지 않고 401을 준다. 바깥에서 오는 요청은 중계(예: tailscale funnel)가 이 주소로 넘겨준다.
 

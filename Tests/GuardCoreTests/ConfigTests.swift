@@ -93,4 +93,34 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(StateStore.load(from: file.path), DeviceRegistrations(watch: old))
         XCTAssertEqual(StateStore.load(from: dir.appendingPathComponent("none.json").path), DeviceRegistrations())
     }
+
+    func testConfigFileMergeKeepsOtherKeysAndIsPrivate() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("mac-guard-config-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let path = folder.appendingPathComponent("config.json").path
+        try Data(#"{"port": 8790, "screenView": true, "apns": {"teamID": "T", "keyID": "K", "keyFile": "~/k.p8", "topic": "t", "environment": "sandbox"}}"#.utf8)
+            .write(to: URL(fileURLWithPath: path))
+        try ConfigFile.merge(SettingsUpdate(lockOnTouch: false, alarmDelaySeconds: 3, screenViewWhenDisarmed: true), into: path)
+        let config = try GuardConfig.load(path: path)
+        XCTAssertEqual(config.port, 8790)
+        XCTAssertTrue(config.screenView)
+        XCTAssertEqual(config.apns?.keyFile, "~/k.p8")
+        XCTAssertFalse(config.lockOnTouch)
+        XCTAssertEqual(config.alarmDelaySeconds, 3)
+        XCTAssertTrue(config.screenViewWhenDisarmed)
+        XCTAssertEqual(config.armGraceSeconds, 0)
+        let mode = try FileManager.default.attributesOfItem(atPath: path)[.posixPermissions] as? Int
+        XCTAssertEqual(mode, 0o600)
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasSuffix(".tmp") }
+        XCTAssertEqual(leftovers, [])
+    }
+
+    func testConfigFileMergeCreatesMissingFile() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("mac-guard-config-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let path = folder.appendingPathComponent("config.json").path
+        try ConfigFile.merge(SettingsUpdate(armGraceSeconds: 5), into: path)
+        XCTAssertEqual(try GuardConfig.load(path: path).armGraceSeconds, 5)
+    }
 }

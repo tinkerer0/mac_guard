@@ -161,4 +161,16 @@ final class GuardEngineTests: XCTestCase {
         XCTAssertTrue(status.alarmActive)
         XCTAssertTrue(status.screenLocked)
     }
+
+    func testAppliedSettingsChangeAlarmDelayAndStatus() {
+        let guardEngine = armedAndLocked()
+        guardEngine.apply(SettingsUpdate(alarmDelaySeconds: 3, armGraceSeconds: 2))
+        _ = guardEngine.physicalInput(at: t0 + 2)
+        XCTAssertEqual(guardEngine.tick(at: t0 + 4.9), [])
+        XCTAssertEqual(guardEngine.tick(at: t0 + 5), [alarm(t0 + 5, since: t0 + 2)])
+        let status = guardEngine.status(inputMonitoring: true, watchRegistered: true, pushConfigured: true)
+        XCTAssertEqual(status.alarmDelaySeconds, 3)
+        XCTAssertEqual(status.armGraceSeconds, 2)
+        XCTAssertEqual(status.watchingFrom, t0 + 2)
+    }
 }

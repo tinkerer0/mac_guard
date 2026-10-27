@@ -75,7 +75,11 @@ private final class FakeService: GuardService {
     func currentStatus() -> GuardStatus { sample }
     func arm(lockOnTouch: Bool?) -> GuardStatus { armedWith.append(lockOnTouch); return sample }
     func disarm() -> GuardStatus { sample }
-    func setLockOnTouch(_ on: Bool) -> GuardStatus { sample }
+    var settingsUpdates: [SettingsUpdate] = []
+    func updateSettings(_ update: SettingsUpdate) -> GuardStatus? {
+        settingsUpdates.append(update)
+        return saveFails ? nil : sample
+    }
     func lockNow() -> LockResult { locks += 1; return LockResult(locked: true, method: "dry-run") }
     func acknowledgeAlarm() -> GuardStatus { acks += 1; return sample }
     func registerDevice(_ role: DeviceRole, deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? {
@@ -105,6 +109,27 @@ final class APIRouterTests: XCTestCase {
 
     private func request(_ method: String, _ path: String, body: String = "", auth: String? = nil) -> HTTPRequest {
         HTTPRequest(method: method, path: path, headers: ["Authorization": "Bearer \(auth ?? token)"], body: Data(body.utf8))
+    }
+
+    func testSettingsAcceptsKnownValuesInRange() {
+        XCTAssertEqual(router.handle(request("POST", "/v1/settings", body: #"{"alarmDelaySeconds":3}"#)).status, 200)
+        XCTAssertEqual(router.handle(request("POST", "/v1/settings", body: #"{"lockOnTouch":false,"armGraceSeconds":0,"screenViewWhenDisarmed":true}"#)).status, 200)
+        XCTAssertEqual(service.settingsUpdates, [
+            SettingsUpdate(alarmDelaySeconds: 3),
+            SettingsUpdate(lockOnTouch: false, armGraceSeconds: 0, screenViewWhenDisarmed: true),
+        ])
+    }
+
+    func testSettingsRejectsEmptyOrOutOfRangeValues() {
+        for body in ["{}", #"{"alarmDelaySeconds":61}"#, #"{"alarmDelaySeconds":-1}"#, #"{"armGraceSeconds":31}"#, #"{"alarmDelaySeconds":"3"}"#, "not json"] {
+            XCTAssertEqual(router.handle(request("POST", "/v1/settings", body: body)).status, 400, body)
+        }
+        XCTAssertTrue(service.settingsUpdates.isEmpty)
+    }
+
+    func testSettingsSaveFailureIs500() {
+        service.saveFails = true
+        XCTAssertEqual(router.handle(request("POST", "/v1/settings", body: #"{"alarmDelaySeconds":3}"#)).status, 500)
     }
 
     func testRejectsMissingOrWrongToken() {
@@ -355,7 +380,7 @@ private final class StubService: GuardService {
     func currentStatus() -> GuardStatus { status }
     func arm(lockOnTouch: Bool?) -> GuardStatus { status }
     func disarm() -> GuardStatus { status }
-    func setLockOnTouch(_ on: Bool) -> GuardStatus { status }
+    func updateSettings(_ update: SettingsUpdate) -> GuardStatus? { status }
     func lockNow() -> LockResult { LockResult(locked: false, method: "unavailable") }
     func acknowledgeAlarm() -> GuardStatus { status }
     func registerDevice(_ role: DeviceRole, deviceToken: String, environment: APNsEnvironment?) -> GuardStatus? { status }

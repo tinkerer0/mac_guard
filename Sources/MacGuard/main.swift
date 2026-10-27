@@ -8,16 +8,17 @@ if let bundleID = Bundle.main.bundleIdentifier,
     exit(0)
 }
 
+let configPath = ProcessInfo.processInfo.environment["MAC_GUARD_CONFIG"]
 let config: GuardConfig
 do {
-    config = try GuardConfig.load(path: ProcessInfo.processInfo.environment["MAC_GUARD_CONFIG"])
+    config = try GuardConfig.load(path: configPath)
 } catch {
     FileHandle.standardError.write(Data("Couldn't read the config file: \(error)\n".utf8))
     exit(1)
 }
 
 let app = NSApplication.shared
-let controller = AppController(config: config)
+let controller = AppController(config: config, configPath: configPath)
 app.delegate = controller
 app.setActivationPolicy(.accessory)
 app.run()

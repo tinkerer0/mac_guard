@@ -211,3 +211,39 @@ public final class EventLog {
         return escaped
     }
 }
+
+public enum ConfigFileError: Error {
+    case notObject
+    case writeFailed(Int32)
+}
+
+/// 앱 설정 화면에서 바꾼 값을 config.json에 남긴다.
+public enum ConfigFile {
+    /// 바꾼 항목만 덮어쓰고 다른 항목(apns 등)은 그대로 둔다. 같은 폴더의 0600 임시 파일에 쓴 뒤 rename으로 통째로 바꾼다
+    /// (대상이 링크면 링크를 따라가지 않고 링크 자체를 바꾼다). 파일이 없으면 새로 만든다.
+    public static func merge(_ update: SettingsUpdate, into path: String?) throws {
+        let url = URL(fileURLWithPath: expandPath(path ?? GuardConfig.defaultPath))
+        var object: [String: Any] = [:]
+        if let data = FileManager.default.contents(atPath: url.path) {
+            guard let existing = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ConfigFileError.notObject }
+            object = existing
+        }
+        if let value = update.lockOnTouch { object["lockOnTouch"] = value }
+        if let value = update.alarmDelaySeconds { object["alarmDelaySeconds"] = value }
+        if let value = update.armGraceSeconds { object["armGraceSeconds"] = value }
+        if let value = update.screenViewWhenDisarmed { object["screenViewWhenDisarmed"] = value }
+        var output = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        output.append(0x0A)
+        let folder = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let temporary = folder.appendingPathComponent(".config.\(UUID().uuidString).tmp")
+        guard FileManager.default.createFile(atPath: temporary.path, contents: output, attributes: [.posixPermissions: 0o600]) else {
+            throw ConfigFileError.writeFailed(errno)
+        }
+        if rename(temporary.path, url.path) != 0 {
+            let code = errno
+            try? FileManager.default.removeItem(at: temporary)
+            throw ConfigFileError.writeFailed(code)
+        }
+    }
+}
