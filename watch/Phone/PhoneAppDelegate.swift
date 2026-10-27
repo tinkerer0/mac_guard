@@ -17,6 +17,10 @@ final class PhoneAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        // 맥은 아이폰 토큰을 하나만 기억한다. 시뮬레이터로 시험할 때 실제 아이폰 등록을 덮어쓰지 않게 보내지 않는다.
+        #if targetEnvironment(simulator)
+        print("mac-guard: simulator, phone token not sent")
+        #else
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
         Task {
             do {
@@ -26,6 +30,7 @@ final class PhoneAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
                 print("mac-guard: phone register failed: \(error)")
             }
         }
+        #endif
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {

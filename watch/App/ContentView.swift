@@ -12,6 +12,7 @@ struct ContentView: View {
     private var controls: some View {
         ScrollView {
             VStack(spacing: 10) {
+                header
                 if let status = model.status, status.isAlarming {
                     Button {
                         Task { await model.acknowledgeAlarm() }
@@ -22,7 +23,6 @@ struct ContentView: View {
                     .tint(.red)
                     .disabled(model.busy)
                 }
-                header
                 if let status = model.status {
                     Button {
                         Task { await model.setArmed(!status.armed) }
@@ -44,8 +44,10 @@ struct ContentView: View {
                 }
                 if model.status != nil {
                     // 경계 중이면서 맥이 풀려 있을 때만 맥이 찍어 준다(자리 비운 동안 AI 작업 확인).
+                    // 워치는 배터리를 아끼려고 3초에 한 장만 받는다.
                     NavigationLink {
-                        ScreenView(client: model.client, pixelWidth: 450)
+                        ScreenView(client: model.client, pixelWidth: 450, minInterval: 3)
+                            .navigationTitle("맥 화면")
                     } label: {
                         Label("화면 보기", systemImage: "display")
                     }
@@ -79,23 +81,17 @@ struct ContentView: View {
                     .multilineTextAlignment(.center)
             }
         } else if let status = model.status {
-            VStack(spacing: 2) {
-                Label(status.isAlarming ? "알람" : (status.armed ? "경계 중" : "경계 꺼짐"),
-                      systemImage: status.isAlarming ? "bell.and.waves.left.and.right.fill" : (status.armed ? "lock.shield.fill" : "lock.shield"))
+            let mood = GuardMood(status)
+            VStack(spacing: 4) {
+                Image(systemName: mood.symbol)
+                    .font(.title2)
+                    .foregroundStyle(mood.color)
+                Text(mood.title)
                     .font(.headline)
-                    .foregroundStyle(status.isAlarming ? .red : (status.armed ? .green : .secondary))
-                if status.armed, let from = status.watchingFrom, from > Date() {
-                    Text("곧 감시 시작")
-                        .font(.caption2)
-                }
-                if status.screenLocked {
-                    Text("맥 잠김")
-                        .font(.caption2)
-                }
-                if let last = status.lastInputAt {
-                    Text("마지막 감지 \(last.formatted(date: .omitted, time: .standard))")
-                        .font(.caption2)
-                }
+                Text(status.summary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
                 if !status.inputMonitoring {
                     Text("맥에서 입력 모니터링 허용 필요")
                         .font(.caption2)

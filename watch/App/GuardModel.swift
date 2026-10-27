@@ -30,7 +30,7 @@ final class GuardModel: ObservableObject {
         defer { busy = false }
         do {
             if on {
-                status = try await client.arm(lockOnTouch: status?.lockOnTouch ?? true)
+                status = try await client.arm()
             } else {
                 status = try await client.disarm()
             }

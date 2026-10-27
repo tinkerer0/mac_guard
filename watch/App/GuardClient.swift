@@ -56,8 +56,9 @@ struct GuardClient {
         try await call("GET", "/v1/status")
     }
 
-    func arm(lockOnTouch: Bool) async throws -> GuardStatusDTO {
-        try await call("POST", "/v1/arm", body: ["lockOnTouch": lockOnTouch])
+    /// lockOnTouch가 nil이면 본문 없이 보내 맥에 있는 설정을 그대로 쓴다.
+    func arm(lockOnTouch: Bool? = nil) async throws -> GuardStatusDTO {
+        try await call("POST", "/v1/arm", body: lockOnTouch.map { ["lockOnTouch": $0] })
     }
 
     func disarm() async throws -> GuardStatusDTO {

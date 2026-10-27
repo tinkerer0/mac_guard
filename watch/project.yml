@@ -12,6 +12,7 @@ targets:
       - App/GuardClient.swift
       - App/GuardNotifications.swift
       - App/ScreenView.swift
+      - App/GuardStyle.swift
       - App/Secrets.generated.swift
     entitlements:
       path: Support/MacGuardPhone.entitlements
@@ -20,6 +21,7 @@ targets:
         com.apple.developer.usernotifications.time-sensitive: true
     dependencies:
       - target: MacGuardWatch
+      - target: MacGuardWidget
     settings:
       base:
         SWIFT_VERSION: "5.0"
@@ -30,6 +32,34 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: 맥 지킴이
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        # 맥 화면을 가로로 크게 보려고 가로 방향을 허용한다.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+  # 홈 화면 위젯. 상태를 맥에 직접 묻고, 버튼(경계 켜기·끄기, 알람 끄기)도 위젯 확장 안에서 맥을 부른다.
+  MacGuardWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - Widget
+      - App/GuardClient.swift
+      - App/GuardStyle.swift
+      - App/Secrets.generated.swift
+    info:
+      path: Support/WidgetInfo.plist
+      properties:
+        CFBundleDisplayName: 맥 지킴이
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.jinwoo.macguard.ios.widget
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: Y35NBHS9WU
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
   MacGuardWatch:
@@ -66,6 +96,7 @@ schemes:
     build:
       targets:
         MacGuardPhone: all
+        MacGuardWidget: all
         MacGuardWatch: all
     run:
       config: Debug

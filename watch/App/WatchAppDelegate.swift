@@ -14,8 +14,11 @@ final class WatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotificatio
     }
 
     func didRegisterForRemoteNotifications(withDeviceToken deviceToken: Data) {
+        // 맥은 워치 토큰을 하나만 기억한다. 시뮬레이터로 시험할 때 실제 워치 등록을 덮어쓰지 않게 보내지 않는다.
+        #if !targetEnvironment(simulator)
         let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
         Task { await model.registerWatchToken(hex) }
+        #endif
     }
 
     func didFailToRegisterForRemoteNotificationsWithError(_ error: Error) {
