@@ -93,11 +93,11 @@ final class GuardEngineTests: XCTestCase {
         XCTAssertEqual(guardEngine.tick(at: t0 + 342), [alarm(t0 + 342, since: t0 + 332)])
     }
 
-    func testPhoneGetsEveryAlertExceptAlarmRepeats() {
+    func testOnlyPhoneGetsAlertsAndNoRepeats() {
         let first = GuardAlert(kind: .alarm, at: t0)
         let again = GuardAlert(kind: .alarm, at: t0 + 15, isRepeat: true)
-        XCTAssertTrue(DeviceRole.watch.receives(first))
-        XCTAssertTrue(DeviceRole.watch.receives(again))
+        XCTAssertFalse(DeviceRole.watch.receives(first))
+        XCTAssertFalse(DeviceRole.watch.receives(again))
         XCTAssertTrue(DeviceRole.phone.receives(first))
         XCTAssertFalse(DeviceRole.phone.receives(again))
         XCTAssertTrue(DeviceRole.phone.receives(GuardAlert(kind: .unlocked, at: t0)))

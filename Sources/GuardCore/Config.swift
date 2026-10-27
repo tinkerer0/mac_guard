@@ -23,9 +23,11 @@ public enum DeviceRole: String, Codable, Sendable, CaseIterable {
     case watch
     case phone
 
-    /// 워치는 모든 알림(알람 반복 포함)을, 핸드폰은 반복을 뺀 알림을 한 번씩 받는다.
+    /// 알림은 아이폰에만 한 번씩 보낸다(반복 없음). 워치는 아이폰이 잠겨 있을 때 iOS가 넘겨줘서 울린다
+    /// (Jinwoo 2026-10-27 "그냥 폰 알림만, 애플워치도 알아서 뜨잖아"). 워치 앱에 직접 보내면
+    /// 아이폰과 겹쳐 두 번 울리거나, 같은 알림 ID면 한쪽만 울려서 그만뒀다.
     public func receives(_ alert: GuardAlert) -> Bool {
-        self == .watch || !alert.isRepeat
+        self == .phone && !alert.isRepeat
     }
 }
 
