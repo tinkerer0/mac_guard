@@ -3,6 +3,7 @@ import SwiftUI
 import WidgetKit
 
 /// 홈 화면 위젯: 맥 지킴이 상태 하나와 버튼 하나(경계 켜기·끄기, 알람 중이면 알람 끄기).
+/// 잠금 화면 1x1 칸은 상태 아이콘만 보여 주고, 누르면 앱이 열린다.
 /// 상태는 위젯이 그려질 때 맥에 직접 묻는다. 시스템이 15분쯤마다 다시 그리고, 앱에서 상태가 바뀌거나 버튼을 누르면 바로 다시 그린다.
 @main
 struct MacGuardWidgetBundle: WidgetBundle {
@@ -20,7 +21,7 @@ struct MacGuardStatusWidget: Widget {
         }
         .configurationDisplayName("MacGuard")
         .description("See guard status and arm or disarm.")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies([.systemSmall, .accessoryCircular])
     }
 }
 
@@ -55,11 +56,33 @@ struct GuardProvider: TimelineProvider {
 }
 
 struct GuardWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: GuardEntry
 
     var body: some View {
+        if family == .accessoryCircular {
+            lockScreen
+        } else {
+            home
+        }
+    }
+
+    /// 잠금 화면은 시스템이 한 가지 색으로 그려 초록·빨강이 보이지 않는다.
+    /// 그래서 모양(채운 방패·빈 방패·종·끊긴 와이파이)과 밝기(켜짐·알람은 밝게, 꺼짐·연결 안 됨은 흐리게)로 구분한다.
+    private var lockScreen: some View {
         let mood = GuardMood(entry.status)
-        VStack(alignment: .leading, spacing: 0) {
+        return ZStack {
+            AccessoryWidgetBackground()
+            Image(systemName: mood.symbol)
+                .font(.title2)
+                .foregroundStyle(mood == .armed || mood == .alarm ? .primary : .secondary)
+                .widgetAccentable()
+        }
+    }
+
+    private var home: some View {
+        let mood = GuardMood(entry.status)
+        return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
                 Image(systemName: mood.symbol)
                     .font(.title2)
