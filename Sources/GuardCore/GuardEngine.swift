@@ -234,8 +234,10 @@ public final class GuardEngine {
         let wasLocked = screenLocked
         screenLocked = locked
         guard !locked, wasLocked, isArmed else { return [] }
+        // 알람이 이미 울렸을 때만 풀렸다고 알린다. 대기 시간 안에 본인이 풀면 아무 알림도 없다(Jinwoo 2026-10-28).
+        let alarmed = lastAlertAt != nil
         disarm()
-        return [.sendAlert(GuardAlert(kind: .unlocked, at: now, screenLocked: false))]
+        return alarmed ? [.sendAlert(GuardAlert(kind: .unlocked, at: now, screenLocked: false))] : []
     }
 
     public func status(inputMonitoring: Bool, watchRegistered: Bool, phoneRegistered: Bool = false, pushConfigured: Bool) -> GuardStatus {

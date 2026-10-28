@@ -67,10 +67,19 @@ final class GuardEngineTests: XCTestCase {
     func testOwnerUnlockWithinDelayCancelsAlarm() {
         let guardEngine = armedAndLocked()
         _ = guardEngine.physicalInput(at: t0 + 6)
-        XCTAssertEqual(guardEngine.screenLockChanged(locked: false, at: t0 + 8),
-                       [.sendAlert(GuardAlert(kind: .unlocked, at: t0 + 8, screenLocked: false))])
+        // 알람 전에 풀었으니 풀렸다는 알림도 보내지 않는다.
+        XCTAssertEqual(guardEngine.screenLockChanged(locked: false, at: t0 + 8), [])
         XCTAssertFalse(guardEngine.isArmed)
         XCTAssertEqual(guardEngine.tick(at: t0 + 20), [])
+    }
+
+    func testUnlockAfterAlarmIsReported() {
+        let guardEngine = armedAndLocked()
+        _ = guardEngine.physicalInput(at: t0 + 6)
+        _ = guardEngine.tick(at: t0 + 16)
+        XCTAssertEqual(guardEngine.screenLockChanged(locked: false, at: t0 + 20),
+                       [.sendAlert(GuardAlert(kind: .unlocked, at: t0 + 20, screenLocked: false))])
+        XCTAssertFalse(guardEngine.isArmed)
     }
 
     func testAlarmRepeatsUntilAcknowledgedThenSnoozes() {
