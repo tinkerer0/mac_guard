@@ -23,9 +23,8 @@ public enum DeviceRole: String, Codable, Sendable, CaseIterable {
     case watch
     case phone
 
-    /// 알림은 아이폰에만 한 번씩 보낸다(반복 없음). 워치는 아이폰이 잠겨 있을 때 iOS가 넘겨줘서 울린다
-    /// (Jinwoo 2026-10-27 "그냥 폰 알림만, 애플워치도 알아서 뜨잖아"). 워치 앱에 직접 보내면
-    /// 아이폰과 겹쳐 두 번 울리거나, 같은 알림 ID면 한쪽만 울려서 그만뒀다.
+    /// 알림은 아이폰에만 한 번씩 보낸다(반복 없음). 워치는 아이폰이 잠겨 있을 때 iOS가 넘겨줘서 울린다.
+    /// 워치 앱에 직접 보내면 아이폰과 겹쳐 두 번 울리거나, 같은 알림 ID면 한쪽만 울려서 그만뒀다.
     public func receives(_ alert: GuardAlert) -> Bool {
         self == .phone && !alert.isRepeat
     }
@@ -50,7 +49,7 @@ public struct GuardConfig: Codable, Equatable, Sendable {
     public var dryRunLock = false
     /// 워치·아이폰에서 맥 화면 보기. 켜도 경계 중이면서 잠기지 않고 화면이 켜져 있을 때만 찍는다.
     public var screenView = false
-    /// 경계를 켜지 않아도 화면 보기를 허용한다(Jinwoo 2026-10-27). 잠김·화면 꺼짐·권한 확인은 그대로.
+    /// 경계를 켜지 않아도 화면 보기를 허용한다. 잠김·화면 꺼짐·권한 확인은 그대로.
     /// 켜면 접속 토큰만 있으면 책상 앞에 있을 때의 화면도 보인다.
     public var screenViewWhenDisarmed = false
     public var apns: APNsConfig?

@@ -3,7 +3,7 @@ import Foundation
 public struct GuardSettings: Codable, Equatable, Sendable {
     /// 경계를 켜면 바로 잠금 화면을 띄운다. 기본은 끔(경계 중에도 AI 작업이 멈추지 않게, 만질 때 잠근다).
     public var lockOnArm: Bool
-    /// 경계를 켠 직후 본인 입력으로 보고 무시하는 시간(초). 기본 0: 켜는 즉시 감시한다(Jinwoo 2026-10-27, 맥 메뉴로 켠 경우도).
+    /// 경계를 켠 직후 본인 입력으로 보고 무시하는 시간(초). 기본 0: 켜는 즉시 감시한다(맥 메뉴로 켠 경우도).
     public var armGrace: TimeInterval
     /// 경계 중 풀린 화면에서 입력이 들어오면 잠근다(경계를 켰는데 잠기지 않은 경우의 대비).
     public var lockOnTouch: Bool
@@ -234,7 +234,7 @@ public final class GuardEngine {
         let wasLocked = screenLocked
         screenLocked = locked
         guard !locked, wasLocked, isArmed else { return [] }
-        // 알람이 이미 울렸을 때만 풀렸다고 알린다. 대기 시간 안에 본인이 풀면 아무 알림도 없다(Jinwoo 2026-10-28).
+        // 알람이 이미 울렸을 때만 풀렸다고 알린다. 대기 시간 안에 본인이 풀면 아무 알림도 없다.
         let alarmed = lastAlertAt != nil
         disarm()
         return alarmed ? [.sendAlert(GuardAlert(kind: .unlocked, at: now, screenLocked: false))] : []

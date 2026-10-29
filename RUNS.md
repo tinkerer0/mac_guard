@@ -1,5 +1,7 @@
 # RUNS
 
+작업마다 남긴 에이전트 작업 기록이다(작업 방식, 독립 검토 모델과 찾은 결함 수, 걸린 시간).
+
 outcome: date=2026-10-22 task=mac-guard-m0 pattern=direct workers=none review=none catches=0 severity=none noise=0 main_fix=none wall_min=21 wait_min=unknown quota=ok escaped=none note="독립 검토는 공개 노출(Funnel) 전으로 미룸. 같은 회사 advisor 조언 2회 반영(TCC 귀속 주의, 잠긴 화면 합성 입력 거르기)"
 outcome: date=2026-10-22 task=mac-guard-m1-install pattern=direct workers=none review=none catches=0 severity=none noise=0 main_fix=none wall_min=unknown wait_min=unknown quota=ok escaped=none note="감시 대기 5초, 경계 중에만 입력 탭, pmset 대체 제거, 로그인 항목 설치, 실제 SAC 잠금·설정 불변·잠자기 0건 실측. 관찰 스크립트 오판(locked=false 문자열)으로 Shift 감지 확인 못 함"
 outcome: date=2026-10-22 task=mac-guard-security-review pattern=pipeline workers=none review=openai:gpt-6-astra catches=6 severity=medium noise=0 main_fix=none wall_min=37 wait_min=unknown quota=ok escaped=mac-guard-m0 note="round1 F1·F2·F3·Q1 coordinator 재현 후 수정(3f6d6f5), round2 N1·N2 회귀 재현 후 수정·Q-N1 가드(e0eb393). 승인 창 Esc로 검토 1회 중단(coordinator 실수, 재지시로 재개). funnel은 auto mode 분류기 차단으로 사용자 실행 대기"
