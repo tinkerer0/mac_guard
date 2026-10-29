@@ -151,3 +151,13 @@ tailscale funnel --bg 8787        # 처음엔 tailnet에서 Funnel 허용 링크
 tailscale funnel reset            # 끄기
 scripts/configure-push.sh         # ~/.config/mac_guard/AuthKey_<KeyID>.p8 를 둔 뒤 실행(키 내용은 읽지 않음)
 ```
+
+## Feedback
+
+제가 이런 분야를 접한 지 얼마 안 돼서 부족한 점이 많습니다. 고칠 점이나 알려주실 내용이 있다면 issue나 PR로 남겨주시면 너무 감사하겠습니다.
+
+I am still new to this, so there is a lot to improve. Issues and pull requests with fixes or suggestions are very welcome.
+
+## License
+
+MIT — [LICENSE](LICENSE)
